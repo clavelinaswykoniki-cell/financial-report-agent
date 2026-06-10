@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "financial-report-agent"
+version = "0.1.0"
+description = "LangChain-powered SEC financial report analysis agent"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+llm = [
+  "langchain>=1.0.0",
+  "langchain-openai>=1.0.0",
+]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+financial-report-agent = "financial_report_agent.cli:main"
+financial-report-dashboard = "financial_report_agent.dashboard:main"
+financial-report-agent-web = "financial_report_agent.dashboard:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
