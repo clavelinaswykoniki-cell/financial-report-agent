@@ -23,7 +23,7 @@ Run a local secret scan before pushing:
 rg -n "sk-[A-Za-z0-9_-]{20,}|(OPENAI|DEEPSEEK|FIN_AGENT)_API_KEY=[\"']?sk-[A-Za-z0-9_-]{20,}" .
 ```
 
-The expected matches should be documentation placeholders such as `sk-...`, not real credentials.
+The expected result is no matches. Use `YOUR_API_KEY` style placeholders in documentation.
 
 ## Financial Safety
 

@@ -32,7 +32,7 @@ python3 -m financial_report_agent --ticker AAPL --llm on
 rg -n "sk-[A-Za-z0-9_-]{20,}|(OPENAI|DEEPSEEK|FIN_AGENT)_API_KEY=[\"']?sk-[A-Za-z0-9_-]{20,}" .
 ```
 
-只允许命中文档占位符，不允许出现真实 key。
+期望无输出；文档里也使用 `YOUR_API_KEY` 风格占位符，避免误报。
 
 ## 发布边界
 

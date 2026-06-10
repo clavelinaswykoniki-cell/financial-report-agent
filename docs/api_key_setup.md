@@ -9,7 +9,7 @@ CLI 可以从 `.env` 读取 key；本地 dashboard 也可以在表单中临时�
 `.env`：
 
 ```bash
-OPENAI_API_KEY="sk-..."
+OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 FIN_AGENT_MODEL="openai:gpt-4o-mini"
 ```
 
@@ -25,7 +25,7 @@ python3 -m financial_report_agent --ticker AAPL --llm on
 `.env`：
 
 ```bash
-DEEPSEEK_API_KEY="sk-..."
+DEEPSEEK_API_KEY="YOUR_DEEPSEEK_API_KEY"
 FIN_AGENT_MODEL="deepseek:deepseek-chat"
 ```
 
@@ -43,7 +43,7 @@ python3 -m financial_report_agent --ticker AAPL --llm on
 `.env`：
 
 ```bash
-FIN_AGENT_API_KEY="sk-..."
+FIN_AGENT_API_KEY="YOUR_OPENAI_COMPATIBLE_API_KEY"
 FIN_AGENT_BASE_URL="https://api.example.com/v1"
 FIN_AGENT_MODEL="openai-compatible:your-model"
 ```
