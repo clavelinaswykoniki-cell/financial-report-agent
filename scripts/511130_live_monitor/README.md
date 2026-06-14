@@ -13,11 +13,23 @@ reports/511130_a_20260612/.venv/bin/python scripts/511130_live_monitor/monitor_5
 reports/511130_a_20260612/.venv/bin/python scripts/511130_live_monitor/monitor_511130.py --mode once
 ```
 
+只测试飞书预警链路：
+
+```bash
+reports/511130_a_20260612/.venv/bin/python scripts/511130_live_monitor/monitor_511130.py --mode notify-test
+```
+
 带 webhook 提醒：
 
 ```bash
 A_MONITOR_WEBHOOK_URL="https://..." A_MONITOR_WEBHOOK_KIND="feishu" \
 reports/511130_a_20260612/.venv/bin/python scripts/511130_live_monitor/monitor_511130.py --mode once --notify
+```
+
+云端手动测试：
+
+```bash
+gh workflow run 511130-a-monitor.yml -f mode=notify-test
 ```
 
 `A_MONITOR_WEBHOOK_KIND` 可填；不填默认 `feishu`：

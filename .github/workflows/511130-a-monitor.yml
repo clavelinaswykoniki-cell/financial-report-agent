@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: precheck or once
+        description: precheck, once, or notify-test
         required: true
         default: once
         type: choice
         options:
           - precheck
           - once
+          - notify-test
   schedule:
     # Asia/Shanghai = UTC+8.
     # 2026-06-14 20:00 CST: PCF evening check.
@@ -68,7 +69,7 @@ jobs:
           python scripts/511130_live_monitor/monitor_511130.py --mode "${{ steps.resolve.outputs.mode }}" --notify
 
       - name: Save monitor state
-        if: always()
+        if: always() && hashFiles('scripts/511130_live_monitor/state.json') != ''
         uses: actions/cache/save@v4
         with:
           path: scripts/511130_live_monitor/state.json
