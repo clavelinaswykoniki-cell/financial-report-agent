@@ -1,0 +1,21 @@
+{
+  "fund_code": "511130",
+  "target_date": "20260615",
+  "compare_date": "20260612",
+  "thresholds": [300, 500, 800],
+  "reset_below_threshold": true,
+  "interest_overrides": {
+    "20260615": {}
+  },
+  "data_sources": {
+    "pcf": "bosera",
+    "interest": "sse_netfull_then_manual_override",
+    "intraday": "eastmoney_1m_then_sina_5m"
+  },
+  "notification": {
+    "webhook_url_env": "A_MONITOR_WEBHOOK_URL",
+    "webhook_kind_env": "A_MONITOR_WEBHOOK_KIND",
+    "feishu_secret_env": "A_MONITOR_FEISHU_SECRET",
+    "default_webhook_kind": "feishu"
+  }
+}

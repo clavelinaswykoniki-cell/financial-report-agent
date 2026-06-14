@@ -15,3 +15,5 @@ __pycache__/
 build/
 dist/
 reports/
+scripts/511130_live_monitor/state.json
+scripts/511130_live_monitor/runs/
