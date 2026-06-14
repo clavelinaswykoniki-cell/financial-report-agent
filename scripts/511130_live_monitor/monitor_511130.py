@@ -128,6 +128,14 @@ def post_json(url: str, payload: dict, *, timeout: int = 15) -> None:
         timeout=timeout,
     )
     response.raise_for_status()
+    try:
+        body = response.json()
+    except Exception:  # noqa: BLE001
+        return
+    error_code = body.get("code", body.get("StatusCode", body.get("errcode")))
+    if error_code not in (None, 0, "0"):
+        message = body.get("msg") or body.get("StatusMessage") or body.get("errmsg") or body
+        raise RuntimeError(f"webhook返回错误: code={error_code}, message={message}")
 
 
 def send_notification(config: dict, title: str, text: str) -> bool:
@@ -507,9 +515,25 @@ def mode_once(config: dict, notify: bool = False) -> int:
     return 0
 
 
+def mode_notify_test(config: dict) -> int:
+    thresholds = [dec(x) for x in config.get("thresholds", [300])]
+    title = "511130 a值预警测试"
+    text = "\n".join(
+        [
+            "这是一条飞书机器人测试消息。",
+            "模拟触发档位: " + ", ".join(f"+{money(threshold)}" for threshold in thresholds),
+            "只读监控，不自动下单。",
+        ]
+    )
+    if not send_notification(config, title, text):
+        raise RuntimeError("A_MONITOR_WEBHOOK_URL未配置，无法发送飞书测试提醒")
+    print("NOTIFY_TEST_SENT: webhook已接受511130 a值预警测试消息")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="511130 live estimated-a monitor")
-    parser.add_argument("--mode", choices=["precheck", "once"], required=True)
+    parser.add_argument("--mode", choices=["precheck", "once", "notify-test"], required=True)
     parser.add_argument("--notify", action="store_true", help="send webhook notification for precheck results and threshold alerts")
     parser.add_argument("--date", help="override target date, e.g. 20260615")
     parser.add_argument("--compare-date", help="override compare date, e.g. 20260612")
@@ -523,6 +547,8 @@ def main() -> int:
         return mode_precheck(config, args.notify)
     if args.mode == "once":
         return mode_once(config, args.notify)
+    if args.mode == "notify-test":
+        return mode_notify_test(config)
     return 1
 
 
