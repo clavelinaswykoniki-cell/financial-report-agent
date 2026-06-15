@@ -7,3 +7,4 @@
 - Hardened a-value correctness gates: PCF structure, creation unit, interest source, stale snapshots, and main status priority.
 - Added focused tests for the live monitor dashboard and formula guardrails.
 - Added K-line style chart controls: date selection, range selection, 1-second line view, and 1-minute/15-minute a-value OHLC aggregation.
+- Mounted Railway Volume `511130-live-monitor-volume` at `/data` and set `A_MONITOR_RUNS_DIR=/data/runs` for persistent chart history.

@@ -1,5 +1,33 @@
 # Handoff
 
+## 2026-06-15 Railway Volume For Persistent History
+
+当前状态：
+
+- Railway Volume 已创建并挂载：
+  - ID：`ed4287d1-7b34-47d5-aa52-536d5a259fc1`
+  - Name：`511130-live-monitor-volume`
+  - Mount path：`/data`
+  - Size：5GB
+- Railway 变量已设置：
+  - `A_MONITOR_RUNS_DIR=/data/runs`
+  - `RAILWAY_DOCKERFILE_PATH=Dockerfile`
+- 当前成功部署：`ee84aa7e-e94f-4531-a737-cdd670b3911e`
+
+验证：
+
+- `railway status` 显示服务 Online，Volume 为 `511130-live-monitor-volume · /data · 0.1 GB / 4.9 GB`。
+- `railway volume list --json` 显示 Volume `status=Ready`。
+- Railway 变量检查确认 `A_MONITOR_RUNS_DIR` 等于 `/data/runs`。
+- 线上 `/health` 返回 `ok=true`。
+- 线上 `/api/dates` 可访问；当前为空是因为挂 Volume 后尚无成功严格实时点写入。
+
+注意：
+
+- 挂 Volume 后，后续有效实时点会写到 `/data/runs/YYYYMMDD/a_values.jsonl`。
+- 当前盘后严格实时行情源失败，系统按 fail-closed 规则不写伪实时 a。
+- Railway GitHub source 构建曾未读到分支里的 Dockerfile，本次最终用干净 worktree 的 `railway up` 部署成功。
+
 ## 2026-06-15 K-line Style Chart Controls
 
 当前状态：

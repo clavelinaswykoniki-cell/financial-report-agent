@@ -27,6 +27,11 @@ python3.12 scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto
   - 范围：近1分钟、近5分钟、近15分钟、近1小时、今天。
   - 周期：1秒折线、1分钟 a值OHLC、15分钟 a值OHLC。
   - 接口：`/api/dates`、`/api/series?date=YYYYMMDD&range=today&interval=1m`。
+- Railway 已挂 Volume：
+  - Volume：`511130-live-monitor-volume`
+  - Mount path：`/data`
+  - 写入路径：`A_MONITOR_RUNS_DIR=/data/runs`
+  - 最新验证部署：`ee84aa7e-e94f-4531-a737-cdd670b3911e`
 
 已知约束：
 
@@ -35,5 +40,4 @@ python3.12 scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto
 - 缺逐券利息不展示伪实时 a。
 - 飞书发送失败要按业务响应码暴露，不只看 HTTP 200。
 - 当前 PCF 结构锁定为 `019776/019837`；换券要先人工确认再改配置。
-- Railway 文件系统不是长期审计存储。
-- 要让过去日期跨 Railway 重启/重部署长期保留，需要挂 Railway Volume 并设置 `A_MONITOR_RUNS_DIR=/data/runs`。
+- 历史曲线依赖 Railway Volume；不要删除 `511130-live-monitor-volume` 或改 `/data` 挂载路径。

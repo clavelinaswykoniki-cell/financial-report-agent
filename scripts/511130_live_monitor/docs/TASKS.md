@@ -13,8 +13,9 @@
 - 2026-06-15: 页面展示 a 值、300 距离、行情时间差、计算时间、飞书最近状态、阈值线、红色超阈值区间、手工利息标签。
 - 2026-06-15: 增加 `/api/config`，支持保存目标日期、阈值和逐券利息覆盖。
 - 2026-06-15: README 补充局域网团队访问命令。
+- 2026-06-15: 挂载 Railway Volume `511130-live-monitor-volume` 到 `/data`，并设置 `A_MONITOR_RUNS_DIR=/data/runs`。
 
 ## Backlog
 
-- 若需要长期审计曲线，接 Railway Volume、数据库或对象存储；当前 Railway 文件只当运行缓存。
+- 若需要更强审计能力，可在 Railway Volume 之外再接数据库或对象存储。
 - 若未来 PCF 换券，先人工确认新券结构，再改 `expected_component_codes`。

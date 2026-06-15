@@ -144,6 +144,14 @@ python -u scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto-
 /health
 ```
 
+Railway 已挂持久化 Volume：
+
+- Volume：`511130-live-monitor-volume`
+- Mount path：`/data`
+- 写入路径：`A_MONITOR_RUNS_DIR=/data/runs`
+
+这意味着 `runs/YYYYMMDD/a_values.jsonl` 会写到 Volume；重启或重新部署后，已有历史曲线仍应保留。
+
 线上校验重点：
 
 - `/health` 返回 `ok: true`。
@@ -178,4 +186,4 @@ GET /api/series?date=20260615&range=today&interval=15m
 
 - 这是内部观察看板，不下单。
 - 如果行情不同步、过旧、PCF结构变化或利息异常，页面会拒绝展示当前 a。
-- Railway 文件系统不是长期审计存储，曲线历史只当运行缓存。要跨重启/重部署长期回看，需要挂 Railway Volume 并设置 `A_MONITOR_RUNS_DIR=/data/runs`。
+- Railway Volume 用于跨重启/重部署保留曲线历史；如果以后删除 Volume 或改挂载路径，历史保留会受影响。
