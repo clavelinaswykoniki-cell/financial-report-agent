@@ -2,16 +2,45 @@
   "fund_code": "511130",
   "target_date": "20260615",
   "compare_date": "20260612",
-  "thresholds": [300, 500, 800],
+  "expected_component_codes": [
+    "019776",
+    "019837"
+  ],
+  "thresholds": [
+    300,
+    500,
+    800
+  ],
   "reset_below_threshold": true,
   "interest_overrides": {
-    "20260615": {}
+    "20260615": {
+      "019776": "0.267",
+      "019837": "0.305"
+    }
   },
+  "allow_interest_fallback": false,
   "data_sources": {
     "pcf": "bosera",
     "interest": "sse_netfull_then_manual_override",
-    "intraday": "eastmoney_1m_then_sina_5m"
+    "intraday": "optional_xtquant_then_eastmoney_realtime_then_sina_realtime_snapshot"
   },
+  "enable_xtquant_snapshot": false,
+  "strict_realtime_price_sources": [
+    "realtime_xtquant",
+    "realtime_eastmoney",
+    "realtime_sina_snapshot"
+  ],
+  "prefer_realtime_snapshot": true,
+  "require_realtime_snapshot": true,
+  "realtime_max_skew_seconds": 3,
+  "realtime_max_stale_seconds": 30,
+  "realtime_request_timeout_seconds": 3,
+  "realtime_request_attempts": 1,
+  "alert_confirmations": 1,
+  "alert_reset_buffer": "20",
+  "notification_timeout_seconds": 3,
+  "allow_missing_interest_fallback": false,
+  "missing_interest_default": "0",
   "notification": {
     "webhook_url_env": "A_MONITOR_WEBHOOK_URL",
     "webhook_kind_env": "A_MONITOR_WEBHOOK_KIND",

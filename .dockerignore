@@ -1,0 +1,16 @@
+.git
+.venv
+__pycache__
+*.pyc
+.DS_Store
+.env
+.env.*
+!*.env.example
+reports
+data
+output
+tmp
+scripts/511130_live_monitor/runs
+scripts/511130_live_monitor/state.json
+scripts/511130_live_monitor/.env
+scripts/511130_live_monitor/.env.local

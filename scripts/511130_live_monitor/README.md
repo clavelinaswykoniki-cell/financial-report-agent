@@ -80,3 +80,102 @@ A_MONITOR_FEISHU_SECRET="飞书机器人安全设置里的签名密钥"
 - 2026-06-15 盘中每 5 分钟：计算预估 a，并按阈值提醒
 
 GitHub Actions 的定时粒度通常是 5 分钟，不是毫秒级行情系统；适合实验监控，不适合作为自动交易基础设施。
+
+## 本地实时曲线看板（网站）
+
+新增 `live_a_dashboard.py`：本地开网页看 511130 a 值实时变化。
+
+```bash
+cd /Users/happytang/Documents/工作
+python3.12 scripts/511130_live_monitor/live_a_dashboard.py --auto-run --open
+```
+
+- `--auto-run`：每 `--interval` 秒自动算一次并写入 `runs/<日期>/a_values.csv`（默认 1 秒）
+- `--open`：自动打开浏览器
+- `--date YYYYMMDD`：指定交易日（默认读 `config.json` 里的 `target_date`）
+- `--interval 秒数`：刷新和自动算间隔（不小于 1 秒）
+
+示例（开盘实时刷新）：
+```bash
+python3.12 scripts/511130_live_monitor/live_a_dashboard.py --auto-run --open --interval 1   # 一秒
+python3.12 scripts/511130_live_monitor/live_a_dashboard.py --auto-run --open --interval 15  # 15秒
+python3.12 scripts/511130_live_monitor/live_a_dashboard.py --auto-run --open --interval 60  # 一分钟
+```
+
+不加 `--auto-run` 时是只读页面，页面里可手动点“手动算一次”触发一次计算。
+
+团队同一局域网访问：
+
+```bash
+cd /Users/happytang/Documents/工作
+python3.12 scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto-run --auto-run-notify --interval 1
+```
+
+同一网络下，手机或电脑访问终端打印的 `Team LAN URL`，形式类似：
+
+```text
+http://你的电脑IP:8787
+```
+
+如果不在同一网络，用公网转发工具转发 `8787` 端口即可，不需要改程序。
+
+## Railway 公网看板
+
+当前 Railway 地址：
+
+```text
+https://511130-live-monitor-production.up.railway.app
+```
+
+部署入口在仓库根目录：
+
+- `Dockerfile`
+- `railway.toml`
+
+Railway 启动命令：
+
+```bash
+python -u scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto-run --interval 1
+```
+
+服务会自动读取 Railway 注入的 `PORT`，健康检查地址是：
+
+```text
+/health
+```
+
+线上校验重点：
+
+- `/health` 返回 `ok: true`。
+- `/api/data` 的 `status.label` 必须是 `正常 / 接近300 / 已超过300` 才代表当前 a 通过实时校验。
+- `quote_skew_seconds` 必须小于等于 `3`。
+- 页面公式里的 a 必须能按 `511130价格 / 100 * 1,000,000 - 成分券价值 - EstimatedCashComponent` 独立复算一致。
+
+## 曲线回看和 a-K线
+
+看板曲线支持两个维度：
+
+- 范围：近1分钟、近5分钟、近15分钟、近1小时、今天。
+- 周期：1秒、1分钟、15分钟。
+
+接口：
+
+```text
+GET /api/dates
+GET /api/series?date=20260615&range=15m&interval=1s
+GET /api/series?date=20260615&range=today&interval=1m
+GET /api/series?date=20260615&range=today&interval=15m
+```
+
+规则：
+
+- 后端保存的仍是 1 秒原始严格实时快照。
+- 1分钟和15分钟视图由原始 a 点聚合为 OHLC：open/high/low/close。
+- 这是 `a值K线`，不是 511130 价格K线。
+- 当前 a 的展示仍走 `/api/data` 的严格实时校验；切到历史日期只改变图表，不把历史值冒充为当前 a。
+
+说明：
+
+- 这是内部观察看板，不下单。
+- 如果行情不同步、过旧、PCF结构变化或利息异常，页面会拒绝展示当前 a。
+- Railway 文件系统不是长期审计存储，曲线历史只当运行缓存。要跨重启/重部署长期回看，需要挂 Railway Volume 并设置 `A_MONITOR_RUNS_DIR=/data/runs`。
