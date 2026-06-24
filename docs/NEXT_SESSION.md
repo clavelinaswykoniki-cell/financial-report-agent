@@ -11,6 +11,7 @@
 
 ## Current State
 
+- 本地有一个尚未部署的 511130 看板布局调整：顶部大号当前 a 统计块已移除，四联行情卡上移，历史曲线移动到四联卡下方；验证截图在 `tmp/511130-dashboard-reorder-local.png`。
 - 当前接续任务是 `scripts/511130_live_monitor` 的 511130 行情更新频率和看板状态确认。
 - 3 秒更新任务已完成：`live_a_dashboard.py` 默认 `--interval=3`，前端按 `cfg.refreshSec * 1000` 轮询，Dockerfile 和 `railway.toml` 均用 `--interval 3`。
 - 本地验证通过：`python3.12 -m py_compile ...` 无错误；`python3.12 -m unittest tests.test_511130_live_monitor` 通过 91 个测试。
@@ -20,6 +21,7 @@
 
 ## Highest Priority Next
 
+- 若用户要求上线本次布局调整，先提交推送，再部署 Railway 并跑只读 smoke。
 - 下一个交易时段复查生产看板是否从 `market_closed` 恢复严格实时 a。
 - 如果 `data_ok=false`，优先看 `/health.diagnostics.pcf`、`diagnostics.quote`、`diagnostics.notification`。
 - 不要放宽 3 秒同步、30 秒新鲜度、缺利息 fail-closed 或东方财富严格实时源锁定。

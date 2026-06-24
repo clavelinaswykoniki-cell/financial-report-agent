@@ -1320,6 +1320,10 @@ class Test511130MonitorHardening(unittest.TestCase):
         self.assertIn("grid-template-columns: repeat(4, minmax(260px, 1fr))", html)
         self.assertIn("function renderAValueCard", html)
         self.assertIn('renderQuoteCards(payload.quote_cards || [], payload.quote_cards_notice || "", payload);', html)
+        self.assertLess(html.index('class="quote-section"'), html.index('class="panel chart-panel"'))
+        self.assertNotIn('class="primary-value"', html)
+        self.assertNotIn('id="latestA"', html)
+        self.assertIn("历史曲线 / a-K线", html)
         self.assertNotIn(".quote-grid { grid-template-columns: 1fr; }", html)
 
     def test_realtime_source_lock_rejects_unconfigured_fallback(self) -> None:

@@ -1,5 +1,27 @@
 # Handoff
 
+## 2026-06-24 - 511130 看板布局调整
+
+状态：本地实现完成，未部署 Railway。
+
+改动：
+
+- 移除顶部左侧大号当前 a 统计块。
+- 四联行情卡上移到标题栏下方，作为首屏主体。
+- 历史曲线 / a-K线移动到四联卡下方。
+- 页面层只改布局，不改 a 值公式、行情源、阈值、飞书发送或 fail-closed 规则。
+
+验证：
+
+- `python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py tests/test_511130_live_monitor.py`
+- `python3.12 -m unittest tests.test_511130_live_monitor`：91 tests OK。
+- 本地 Chrome 截图：`tmp/511130-dashboard-reorder-local.png`，DOM 检查 `cards=4`、`hasPrimary=false`、`hasLatestA=false`、`chartBelowQuote=true`。
+
+下一步：
+
+- 用户若要求上线，提交并推送当前分支，再部署 Railway。
+- 部署后跑 `python3.12 scripts/511130_live_monitor/smoke_check.py https://511130-live-monitor-production.up.railway.app --json`。
+
 ## 2026-06-24 - 511130 行情更新频率接续检查
 
 状态：接续完成，未发现 511130 看板仍卡在旧的 15 秒频率。根目录交接文档此前停在 `research_training_daily`，已同步回 511130 当前状态。

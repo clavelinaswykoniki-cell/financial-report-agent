@@ -1,5 +1,37 @@
 # Handoff
 
+## 2026-06-24 Dashboard Layout Reorder
+
+当前状态：
+
+- 已按用户确认的效果图调整 511130 团队看板首屏。
+- 删除原顶部左侧大统计块：`当前 a 值`、`511130 价格`、`距离 300`、`行情时间差`、`最新计算时间`、`飞书最近状态`、`点位数` 和盘外/休市提示不再单独占据左上大面板。
+- 四联行情卡现在紧跟标题栏显示：`511130`、`019776`、`019837`、`套利值A`。
+- 历史曲线 / a-K线移动到四联卡下方，标题改为 `历史曲线 / a-K线`。
+- `套利值A` 卡仍展示当前 a、阈值、状态和严格实时说明；页面层没有改公式、行情源、阈值、飞书发送或 fail-closed 规则。
+- 本轮没有发飞书测试消息、没有部署 Railway、没有做交易或下单动作。
+
+修改文件：
+
+- `scripts/511130_live_monitor/live_a_dashboard.py`
+- `tests/test_511130_live_monitor.py`
+- `scripts/511130_live_monitor/docs/CHANGELOG.md`
+- `scripts/511130_live_monitor/docs/HANDOFF.md`
+- `scripts/511130_live_monitor/docs/TASKS.md`
+- `scripts/511130_live_monitor/docs/NEXT_SESSION.md`
+
+验证：
+
+- `python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py tests/test_511130_live_monitor.py`
+- `python3.12 -m unittest tests.test_511130_live_monitor`，91 tests OK。
+- 本地只读预览 `127.0.0.1:8811` Chrome 截图通过：`cards=4`、`hasPrimary=false`、`hasLatestA=false`、`quoteTop=94`、`chartTop=639`、`chartBelowQuote=true`。
+- 本地截图：`tmp/511130-dashboard-reorder-local.png`。
+
+下一步：
+
+- 用户若确认此版可上线，再提交、推送并部署 Railway。
+- 部署后跑只读 `smoke_check.py`，并确认生产 HTML 仍是 `refreshSec=3`、四联卡在图表上方。
+
 ## 2026-06-24 Quote Cards, Four-Card Strip, Five-Level Order Book, 3s Refresh
 
 当前状态：

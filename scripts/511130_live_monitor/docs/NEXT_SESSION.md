@@ -10,6 +10,9 @@
 
 ## Current State
 
+- 2026-06-24 local code has a dashboard layout reorder requested by the user and confirmed from a mockup: the old top-left current-a summary block is removed, the connected four-card market strip is now the first content below the title/actions, and the historical curve / a-Kline section sits directly below the four-card strip.
+- The layout reorder is local only at this handoff. It has not been committed, pushed, or deployed to Railway yet.
+- Local verification for the layout reorder passed: `python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py tests/test_511130_live_monitor.py`; `python3.12 -m unittest tests.test_511130_live_monitor` returned 91 tests OK; Chrome screenshot on `127.0.0.1:8811` returned `cards=4`, `hasPrimary=false`, `hasLatestA=false`, and `chartBelowQuote=true`. Screenshot: `tmp/511130-dashboard-reorder-local.png`.
 - 2026-06-24 local code now adds per-security quote cards for `511130`, `019776`, and `019837`: latest price, change, turnover, five-level bid/ask display, and a sparkline from cached Eastmoney 1-minute intraday data, Sina 1-minute fallback, plus saved strict-realtime calculation points.
 - The market section is now a connected four-card horizontal strip: `511130`, `019776`, `019837`, and `套利值A`; desktop cards have zero gap, and narrow screens keep the four-card strip horizontal through local scrolling instead of stacking vertically.
 - Five-level order book data is display-only from Sina snapshot parsing. It does not enter the a-value formula, current-a fail-closed decision, or Feishu alert path.

@@ -1680,6 +1680,7 @@ def build_dashboard_html(state: DashboardState, points: list[dict]) -> str:
     .tag.warn { background: #fff7ed; color: #9a3412; }
     canvas { width: 100%; height: 360px; display: block; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
     .quote-section { margin-top: 12px; }
+    .chart-panel { margin-top: 12px; }
     .quote-section-head {
       display: flex;
       justify-content: space-between;
@@ -1973,67 +1974,6 @@ def build_dashboard_html(state: DashboardState, points: list[dict]) -> str:
       </div>
     </div>
 
-    <section class="hero">
-      <div class="panel">
-        <div class="primary-value">
-          <div>
-            <div class="a-label">当前 a 值</div>
-            <div class="a-value" id="latestA">-</div>
-          </div>
-          <div class="status-pill status-muted" id="statusPill">等待数据</div>
-        </div>
-        <div class="metric-grid">
-          <div class="metric"><div class="label">511130 价格</div><div class="value" id="latestETF">-</div></div>
-          <div class="metric"><div class="label">距离 300</div><div class="value" id="distance300">-</div></div>
-          <div class="metric"><div class="label">行情时间差</div><div class="value" id="quoteSkew">-</div></div>
-          <div class="metric"><div class="label">最新计算时间</div><div class="value" id="calcTime">-</div></div>
-          <div class="metric"><div class="label">飞书最近状态</div><div class="value" id="latestNotify">-</div></div>
-          <div class="metric"><div class="label">点位数</div><div class="value" id="count">-</div></div>
-        </div>
-        <div class="bond-strip" id="componentStrip"></div>
-        <div class="message error" id="lastErr"></div>
-      </div>
-
-      <div class="panel">
-        <div class="chart-head">
-          <div>
-            <div class="section-title">a 曲线 / a-K线</div>
-            <div class="meta" id="chartModeNote">默认显示近15分钟1秒实时线</div>
-          </div>
-          <div class="chart-controls">
-            <div class="chart-control">
-              <label for="seriesRange">范围</label>
-              <select id="seriesRange">
-                <option value="1m">近1分钟</option>
-                <option value="5m">近5分钟</option>
-                <option value="15m">近15分钟</option>
-                <option value="1h">近1小时</option>
-                <option value="day" selected>全天</option>
-              </select>
-            </div>
-            <div class="chart-control">
-              <label for="seriesInterval">周期</label>
-              <select id="seriesInterval">
-                <option value="1s" selected>1秒</option>
-                <option value="1m">1分钟</option>
-                <option value="15m">15分钟</option>
-              </select>
-            </div>
-            <div class="chart-control">
-              <label for="seriesDate">日期</label>
-              <select id="seriesDate"></select>
-            </div>
-          </div>
-        </div>
-        <canvas id="chart" height="360"></canvas>
-        <div class="chart-footer">
-          <div class="chart-stat"><span>最近最高</span><strong id="chartMax">-</strong></div>
-          <div class="chart-stat"><span>最近最低</span><strong id="chartMin">-</strong></div>
-          <div class="chart-stat"><span>最新值</span><strong id="chartLatest">-</strong></div>
-        </div>
-      </div>
-    </section>
-
     <section class="quote-section">
       <div class="quote-section-head">
         <div>
@@ -2044,6 +1984,45 @@ def build_dashboard_html(state: DashboardState, points: list[dict]) -> str:
       </div>
       <div class="quote-strip-scroll">
         <div class="quote-grid" id="quoteCards"></div>
+      </div>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="chart-head">
+        <div>
+          <div class="section-title">历史曲线 / a-K线</div>
+          <div class="meta" id="chartModeNote">默认显示全天1秒历史回放</div>
+        </div>
+        <div class="chart-controls">
+          <div class="chart-control">
+            <label for="seriesRange">范围</label>
+            <select id="seriesRange">
+              <option value="1m">近1分钟</option>
+              <option value="5m">近5分钟</option>
+              <option value="15m">近15分钟</option>
+              <option value="1h">近1小时</option>
+              <option value="day" selected>全天</option>
+            </select>
+          </div>
+          <div class="chart-control">
+            <label for="seriesInterval">周期</label>
+            <select id="seriesInterval">
+              <option value="1s" selected>1秒</option>
+              <option value="1m">1分钟</option>
+              <option value="15m">15分钟</option>
+            </select>
+          </div>
+          <div class="chart-control">
+            <label for="seriesDate">日期</label>
+            <select id="seriesDate"></select>
+          </div>
+        </div>
+      </div>
+      <canvas id="chart" height="360"></canvas>
+      <div class="chart-footer">
+        <div class="chart-stat"><span>最近最高</span><strong id="chartMax">-</strong></div>
+        <div class="chart-stat"><span>最近最低</span><strong id="chartMin">-</strong></div>
+        <div class="chart-stat"><span>最新值</span><strong id="chartLatest">-</strong></div>
       </div>
     </section>
 
@@ -2246,8 +2225,10 @@ function setStatus(status) {
   const pill = document.getElementById("statusPill");
   const level = status?.level || "muted";
   const code = status?.code || "";
-  pill.className = `status-pill status-${level}`;
-  pill.textContent = status?.label || "等待数据";
+  if (pill) {
+    pill.className = `status-pill status-${level}`;
+    pill.textContent = status?.label || "等待数据";
+  }
   document.body.classList.toggle("alert-active", code === "over_300");
 }
 
@@ -2265,6 +2246,7 @@ function applyReadOnlyMode(payload) {
 
 function renderComponentStrip(components) {
   const wrap = document.getElementById("componentStrip");
+  if (!wrap) return;
   wrap.innerHTML = "";
   if (!components || !components.length) return;
   for (const item of components.slice(0, 2)) {
@@ -2774,12 +2756,17 @@ async function refreshData() {
     setText("compSource", payload.component_source || "-");
     const err = payload.last_error || payload.status?.detail || "";
     const chartNotice = payload.chart_notice || "";
-    document.getElementById("lastErr").textContent = [err && payload.status?.level !== "ok" ? err : "", chartNotice].filter(Boolean).join("；");
+    const lastErr = document.getElementById("lastErr");
+    if (lastErr) {
+      lastErr.textContent = [err && payload.status?.level !== "ok" ? err : "", chartNotice].filter(Boolean).join("；");
+    }
     await refreshSeries();
   } catch (error) {
     setText("statusPill", "取数失败");
-    document.getElementById("statusPill").className = "status-pill status-danger";
-    document.getElementById("lastErr").textContent = String(error);
+    const pill = document.getElementById("statusPill");
+    if (pill) pill.className = "status-pill status-danger";
+    const lastErr = document.getElementById("lastErr");
+    if (lastErr) lastErr.textContent = String(error);
   }
 }
 

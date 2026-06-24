@@ -2,6 +2,7 @@
 
 ## 2026-06-24
 
+- 本地完成 511130 团队看板布局调整：去掉顶部大号当前 a 统计块，四联行情卡上移到首屏，历史曲线移动到四联卡下方；公式、行情源、阈值和飞书逻辑未改。
 - 接续检查 `scripts/511130_live_monitor` 的“加快行情更新频率”任务。
 - 代码已确认：`live_a_dashboard.py` 默认 `--interval=3`，前端按 `cfg.refreshSec * 1000` 轮询，Dockerfile 和 `railway.toml` 启动命令均使用 `--interval 3`。
 - 线上只读 smoke 通过：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`。

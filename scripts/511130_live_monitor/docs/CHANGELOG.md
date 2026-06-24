@@ -2,6 +2,8 @@
 
 ## 2026-06-24
 
+- Moved the connected four-card market strip to the top of the dashboard, removed the old large top-left current-a summary block, and moved the historical curve section directly below the four-card strip.
+- Added regression coverage so the dashboard HTML keeps the quote-card strip above the historical chart and does not reintroduce the removed primary current-a block.
 - Added dashboard quote cards for `511130`, `019776`, and `019837`, including latest price, change, turnover, five-level bid/ask display, and per-security sparklines from cached Eastmoney 1-minute intraday data, Sina 1-minute fallback, plus saved strict-realtime points.
 - Changed the market area into a connected four-card horizontal strip: `511130`, `019776`, `019837`, and `套利值A` sit side by side with zero card gap; narrow screens keep the strip horizontal with local scrolling instead of stacking it vertically.
 - Kept the five-level order book as display-only Sina snapshot data; strict current-a calculation and Feishu alerts remain locked to Eastmoney realtime snapshots.
