@@ -10,6 +10,7 @@
 - `config.json`
 - `monitor_511130.py`
 - `live_a_dashboard.py`
+- `daily_actual_a_report.py`
 - `docs/NEXT_SESSION.md`
 
 ## Rules
@@ -25,14 +26,15 @@
 常用检查：
 
 ```bash
-python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py scripts/511130_live_monitor/monitor_511130.py
+python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py scripts/511130_live_monitor/monitor_511130.py scripts/511130_live_monitor/daily_actual_a_report.py tests/test_511130_live_monitor.py
+python3.12 -m unittest tests.test_511130_live_monitor
 python3.12 scripts/511130_live_monitor/monitor_511130.py --mode selftest
 ```
 
 本地看板：
 
 ```bash
-python3.12 scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto-run --auto-run-notify --interval 1
+python3.12 scripts/511130_live_monitor/live_a_dashboard.py --host 0.0.0.0 --auto-run --auto-run-notify --interval 3
 ```
 
 Railway 公网看板：
@@ -48,3 +50,5 @@ Railway 入口：
 - `/health`
 
 Railway 当前用途是内部观察，不是交易基础设施。准确性策略是 fail closed：数据不同步、过旧、缺利息、PCF结构变化、利息异常时不展示当前 a。
+
+次日实际 a 日报同样 fail closed：必须读到运行日 PCF 的 `PreTradingDay`、目标日 PCF、逐券利息和 240 个 1 分钟共同时间戳后，才输出正式 PDF/CSV。5 分钟文件只做交叉核验，不替代 1 分钟正式主口径。

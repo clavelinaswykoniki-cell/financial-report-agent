@@ -3,21 +3,25 @@ from __future__ import annotations
 
 import argparse
 import base64
-import concurrent.futures
 import csv
+from email.utils import parsedate_to_datetime
 import hashlib
 import hmac
 import importlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from curl_cffi import requests as curl_requests
@@ -26,6 +30,8 @@ BASE = Path(__file__).resolve().parent
 WORKSPACE = BASE.parents[1]
 CONFIG_PATH = BASE / "config.json"
 STATE_PATH = BASE / "state.json"
+_STATE_CACHE: dict | None = None
+_STATE_CACHE_DIRTY = False
 RUNS_DIR = Path(os.environ.get("A_MONITOR_RUNS_DIR", BASE / "runs")).expanduser()
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -96,6 +102,15 @@ def truthy_env(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def resolve_target_date(value: str | None = None) -> tuple[str, str]:
+    text = str(value or "").strip()
+    if text.lower() in {"", "auto", "today", "shanghai_today"}:
+        return datetime.now(TZ).strftime("%Y%m%d"), "auto"
+    if len(text) == 8 and text.isdigit():
+        return text, "fixed"
+    raise RuntimeError(f"target_date无效: {text}; 请使用 YYYYMMDD 或 auto")
+
+
 def load_local_env() -> None:
     for path in (BASE / ".env", BASE / ".env.local"):
         if not path.exists():
@@ -114,9 +129,10 @@ def load_local_env() -> None:
 def load_config() -> dict:
     load_local_env()
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    target_date = os.environ.get("A_MONITOR_TARGET_DATE", "").strip()
-    if target_date:
-        config["target_date"] = target_date
+    raw_target_date = os.environ.get("A_MONITOR_TARGET_DATE", "").strip() or str(config.get("target_date", "auto"))
+    target_date, target_date_mode = resolve_target_date(raw_target_date)
+    config["target_date"] = target_date
+    config["target_date_mode"] = target_date_mode
     threshold_text = os.environ.get("A_MONITOR_THRESHOLDS", "").strip()
     if threshold_text:
         config["thresholds"] = [int(part.strip()) for part in threshold_text.split(",") if part.strip()]
@@ -149,24 +165,80 @@ def load_config() -> dict:
 
 
 def load_state() -> dict:
+    global _STATE_CACHE, _STATE_CACHE_DIRTY
+    if _STATE_CACHE_DIRTY and _STATE_CACHE is not None:
+        return _STATE_CACHE
     if not STATE_PATH.exists():
-        return {"dates": {}}
-    return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        state = {"dates": {}}
+        _STATE_CACHE = state
+        return state
+    try:
+        state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: state.json读取失败，使用空状态: {exc}", file=sys.stderr)
+        state = _STATE_CACHE if _STATE_CACHE is not None else {"dates": {}}
+        _STATE_CACHE = state
+        return state
+    if not isinstance(state, dict):
+        print("WARN: state.json不是object，使用空状态", file=sys.stderr)
+        state = {"dates": {}}
+        _STATE_CACHE = state
+        return state
+    dates = state.get("dates")
+    if not isinstance(dates, dict):
+        if dates is not None:
+            print("WARN: state.json dates不是object，已重置", file=sys.stderr)
+        state["dates"] = {}
+    else:
+        clean_dates = {str(key): value for key, value in dates.items() if isinstance(value, dict)}
+        if len(clean_dates) != len(dates):
+            print("WARN: state.json dates包含无效条目，已忽略", file=sys.stderr)
+        state["dates"] = clean_dates
+    if "interest_cache" in state and not isinstance(state["interest_cache"], dict):
+        print("WARN: state.json interest_cache不是object，已重置", file=sys.stderr)
+        state["interest_cache"] = {}
+    _STATE_CACHE = state
+    _STATE_CACHE_DIRTY = False
+    return state
 
 
 def save_state(state: dict) -> None:
-    tmp = STATE_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(STATE_PATH)
+    global _STATE_CACHE, _STATE_CACHE_DIRTY
+    _STATE_CACHE = state
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=str(STATE_PATH.parent),
+            prefix=f"{STATE_PATH.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+            tmp.write(json.dumps(state, ensure_ascii=False, indent=2))
+        tmp_path.replace(STATE_PATH)
+        _STATE_CACHE_DIRTY = False
+    except Exception:
+        _STATE_CACHE_DIRTY = True
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+        raise
 
 
 def load_interest_cache() -> dict:
     return load_state().get("interest_cache") or {}
 
 
-def save_interest_cache(interests: dict[str, tuple[Decimal, str]]) -> None:
+def save_interest_cache(interests: dict[str, tuple[Decimal, str]], date_compact: str | None = None) -> None:
     state = load_state()
     cache = state.setdefault("interest_cache", {})
+    by_date = cache.setdefault("by_date", {}) if date_compact else {}
+    date_cache = by_date.setdefault(date_compact, {}) if date_compact else {}
     for code, (value, source) in interests.items():
         if str(source).startswith("missing_interest_default"):
             continue
@@ -175,8 +247,18 @@ def save_interest_cache(interests: dict[str, tuple[Decimal, str]]) -> None:
             "source": source,
             "updated_at": datetime.now(TZ).strftime("%Y%m%d"),
         }
+        if date_compact:
+            date_cache[code] = {
+                "value": str(value),
+                "source": source,
+                "trading_day": date_compact,
+                "updated_at": datetime.now(TZ).isoformat(timespec="seconds"),
+            }
     state["interest_cache"] = cache
-    save_state(state)
+    try:
+        save_state(state)
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: 利息缓存写盘失败: {exc}", file=sys.stderr)
 
 
 def request_text(
@@ -212,6 +294,60 @@ def request_json(
     return json.loads(text)
 
 
+def request_text_external_curl(
+    url: str,
+    *,
+    params: dict | None = None,
+    headers: dict | None = None,
+    timeout: float = 5,
+) -> str:
+    curl_path = shutil.which("curl")
+    if not curl_path:
+        raise RuntimeError("系统curl不可用")
+    full_url = url
+    if params:
+        full_url = f"{url}?{urlencode(params, safe=',')}"
+    merged = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", **(headers or {})}
+    cmd = [
+        curl_path,
+        "--silent",
+        "--show-error",
+        "--fail",
+        "--http1.1",
+        "--max-time",
+        str(max(1, int(timeout))),
+    ]
+    for key, value in merged.items():
+        cmd.extend(["-H", f"{key}: {value}"])
+    cmd.append(full_url)
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=max(3, float(timeout) + 2),
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or f"exit={proc.returncode}").strip()
+        raise RuntimeError(f"系统curl读取失败: {detail}")
+    text = proc.stdout.strip()
+    if not text:
+        raise RuntimeError("系统curl返回空响应")
+    return text
+
+
+def request_json_external_curl(
+    url: str,
+    *,
+    params: dict,
+    headers: dict | None = None,
+    timeout: float = 5,
+) -> dict:
+    text = request_text_external_curl(url, params=params, headers=headers, timeout=timeout)
+    return json.loads(text)
+
+
 def post_json(url: str, payload: dict, *, timeout: float = 15) -> dict:
     response = curl_requests.post(
         url,
@@ -225,6 +361,35 @@ def post_json(url: str, payload: dict, *, timeout: float = 15) -> dict:
         return response.json()
     except Exception:  # noqa: BLE001
         return {}
+
+
+def http_date_timestamp(url: str, *, timeout: float = 3) -> int:
+    response = curl_requests.head(url, headers={"User-Agent": "Mozilla/5.0"}, impersonate="chrome", timeout=timeout)
+    date_header = response.headers.get("Date") or response.headers.get("date")
+    if not date_header:
+        raise RuntimeError(f"HTTP Date头缺失: {url}")
+    parsed = parsedate_to_datetime(date_header)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+def feishu_signature_timestamp(notification: dict, config: dict) -> tuple[int, str]:
+    source = str(notification.get("feishu_timestamp_source", config.get("feishu_timestamp_source", "http_date"))).strip()
+    if source == "local":
+        return int(time.time()), "local"
+    url = str(
+        notification.get("feishu_timestamp_url")
+        or config.get("feishu_timestamp_url")
+        or os.environ.get("A_MONITOR_FEISHU_TIMESTAMP_URL", "")
+        or "https://open.feishu.cn"
+    ).strip()
+    timeout = float(notification.get("feishu_timestamp_timeout_seconds", config.get("feishu_timestamp_timeout_seconds", 3)))
+    try:
+        return http_date_timestamp(url, timeout=timeout), "http_date"
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: 飞书HTTP Date时间戳获取失败，回退本地时间: {exc}", file=sys.stderr)
+        return int(time.time()), "local_fallback"
 
 
 def validate_pcf(pcf: Pcf, config: dict | None = None) -> None:
@@ -276,8 +441,10 @@ def send_notification(config: dict, title: str, text: str) -> dict | bool:
         payload = {"msg_type": "text", "content": {"text": f"{title}\n{text}"}}
         secret_env = notification.get("feishu_secret_env", "A_MONITOR_FEISHU_SECRET")
         secret = os.environ.get(secret_env, "").strip()
+        signature_timestamp_source = ""
         if secret:
-            timestamp = str(int(time.time()))
+            timestamp_int, signature_timestamp_source = feishu_signature_timestamp(notification, config)
+            timestamp = str(timestamp_int)
             string_to_sign = f"{timestamp}\n{secret}"
             sign = base64.b64encode(
                 hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
@@ -293,12 +460,19 @@ def send_notification(config: dict, title: str, text: str) -> dict | bool:
     result = post_json(url, payload, timeout=float(timeout))
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     if kind == "feishu":
-        code = result.get("code", result.get("StatusCode", 0))
+        if "code" in result:
+            code = result.get("code")
+        elif "StatusCode" in result:
+            code = result.get("StatusCode")
+        else:
+            raise RuntimeError(f"飞书通知失败: 缺少业务响应码, response={result}")
         if str(code) != "0":
             message = result.get("msg") or result.get("StatusMessage") or result
             raise RuntimeError(f"飞书通知失败: code={code}, msg={message}")
     elif kind in {"wecom", "wechat_work", "enterprise_wechat"}:
-        code = result.get("errcode", 0)
+        if "errcode" not in result:
+            raise RuntimeError(f"企业微信通知失败: 缺少业务响应码, response={result}")
+        code = result.get("errcode")
         if str(code) != "0":
             raise RuntimeError(f"企业微信通知失败: errcode={code}, errmsg={result.get('errmsg', result)}")
     return {
@@ -307,7 +481,65 @@ def send_notification(config: dict, title: str, text: str) -> dict | bool:
         "sent_at": datetime.now(TZ).isoformat(timespec="milliseconds"),
         "elapsed_ms": elapsed_ms,
         "response": result,
+        "signature_timestamp_source": signature_timestamp_source if kind == "feishu" else "",
     }
+
+
+def send_notification_with_retries(config: dict, title: str, text: str) -> dict | bool:
+    notification = config.get("notification") or {}
+    attempts = int(notification.get("attempts", config.get("notification_attempts", 3)))
+    attempts = max(1, attempts)
+    retry_delay = dec(notification.get("retry_delay_seconds", config.get("notification_retry_delay_seconds", "1")))
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            result = send_notification(config, title, text)
+            if isinstance(result, dict):
+                result = dict(result)
+                result["attempt"] = attempt
+                result["max_attempts"] = attempts
+            return result
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt < attempts and retry_delay > 0:
+                time.sleep(float(retry_delay))
+    raise RuntimeError(f"通知失败: 已重试{attempts}次仍失败: {last_exc}") from last_exc
+
+
+def notification_configured(config: dict) -> bool:
+    return bool(notification_setup(config)["webhook_configured"])
+
+
+def notification_setup(config: dict) -> dict[str, object]:
+    load_local_env()
+    notification = config.get("notification") or {}
+    url_env = str(notification.get("webhook_url_env", "A_MONITOR_WEBHOOK_URL"))
+    kind_env = str(notification.get("webhook_kind_env", "A_MONITOR_WEBHOOK_KIND"))
+    secret_env = str(notification.get("feishu_secret_env", "A_MONITOR_FEISHU_SECRET"))
+    env_url = os.environ.get(url_env, "").strip()
+    config_url = str(notification.get("webhook_url", "")).strip()
+    env_kind = os.environ.get(kind_env, "").strip().lower()
+    default_kind = str(notification.get("default_webhook_kind", "generic")).strip().lower() or "generic"
+    kind = env_kind or default_kind
+    setup: dict[str, object] = {
+        "webhook_configured": bool(env_url or config_url),
+        "webhook_source": "env" if env_url else "config" if config_url else "missing",
+        "webhook_env": url_env,
+        "kind": kind,
+        "kind_source": "env" if env_kind else "config",
+        "kind_env": kind_env,
+    }
+    if kind == "feishu":
+        env_secret = os.environ.get(secret_env, "").strip()
+        setup.update(
+            {
+                "feishu_secret_configured": bool(env_secret),
+                "feishu_secret_source": "env" if env_secret else "missing",
+                "feishu_secret_env": secret_env,
+                "signing_note": "签名已配置" if env_secret else "签名未配置；若机器人开启签名会失败",
+            }
+        )
+    return setup
 
 
 def fetch_pcf(date_compact: str, fund_code: str = ETF_CODE) -> Pcf:
@@ -366,7 +598,10 @@ def fetch_sse_interest(date_compact: str, code: str) -> tuple[Decimal, str]:
 def get_interests(date_compact: str, pcf: Pcf, config: dict) -> dict[str, tuple[Decimal, str]]:
     overrides = ((config.get("interest_overrides") or {}).get(date_compact) or {})
     allow_cache_fallback = bool(config.get("allow_interest_fallback", False))
-    cached_interests = load_interest_cache() if allow_cache_fallback else {}
+    allow_same_day_cache = bool(config.get("allow_same_day_interest_cache", True))
+    interest_cache = load_interest_cache() if allow_cache_fallback or allow_same_day_cache else {}
+    cached_interests = interest_cache if allow_cache_fallback else {}
+    same_day_cache = ((interest_cache.get("by_date") or {}).get(date_compact) or {}) if allow_same_day_cache else {}
     interests: dict[str, tuple[Decimal, str]] = {}
     missing: list[str] = []
     for component in pcf.components:
@@ -389,6 +624,26 @@ def get_interests(date_compact: str, pcf: Pcf, config: dict) -> dict[str, tuple[
                     missing.remove(msg)
         if fallbacked:
             print(f"WARN: {', '.join(fallbacked)} 利息采用历史缓存，可能与今日实时值有偏差")
+    if same_day_cache:
+        fallbacked_same_day: list[str] = []
+        for msg in missing[:]:
+            code = msg.split("(", 1)[0]
+            entry = same_day_cache.get(code) if isinstance(same_day_cache, dict) else None
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("trading_day", "")) != date_compact:
+                continue
+            source = str(entry.get("source", ""))
+            if not source.startswith(("sse_netfull", "manual_trading_software_override")):
+                continue
+            value_text = str(entry.get("value", "")).strip()
+            if not value_text:
+                continue
+            interests[code] = (dec(value_text), f"{source}_same_day_cache_{date_compact}")
+            fallbacked_same_day.append(code)
+            missing.remove(msg)
+        if fallbacked_same_day:
+            print(f"WARN: {', '.join(fallbacked_same_day)} 利息采用同日已验证缓存")
     if missing and bool(config.get("allow_missing_interest_fallback", False)):
         default_value = dec(config.get("missing_interest_default", "0"))
         for msg in missing[:]:
@@ -401,7 +656,7 @@ def get_interests(date_compact: str, pcf: Pcf, config: dict) -> dict[str, tuple[
     return interests
 
 
-def fetch_eastmoney_1m(code: str) -> dict[str, Decimal]:
+def fetch_eastmoney_1m(code: str, *, timeout: float = 20, attempts: int = 3) -> dict[str, Decimal]:
     payload = request_json(
         EASTMONEY_TRENDS_URL,
         params={
@@ -413,6 +668,8 @@ def fetch_eastmoney_1m(code: str) -> dict[str, Decimal]:
             "secid": f"1.{code}",
         },
         headers={"Referer": "https://quote.eastmoney.com/"},
+        timeout=timeout,
+        attempts=attempts,
     )
     trends = (payload.get("data") or {}).get("trends") or []
     rows: dict[str, Decimal] = {}
@@ -445,22 +702,127 @@ def fetch_sina_kline(code: str, scale: str = "5") -> dict[str, Decimal]:
     }
 
 
+def parse_sina_snapshot_rows(text: str, codes: list[str]) -> dict[str, list[str]]:
+    rows: dict[str, list[str]] = {}
+    for match in re.finditer(r'var hq_str_sh(\d+)="(.*?)";', text):
+        rows[match.group(1)] = match.group(2).split(",")
+    missing = [code for code in codes if code not in rows]
+    if missing:
+        raise RuntimeError(f"新浪实时快照缺少: {missing}")
+    return rows
+
+
+def decimal_text(value: Decimal, places: int = 3) -> str:
+    if value.is_nan():
+        return "-"
+    quant = Decimal("1") if places <= 0 else Decimal("1").scaleb(-places)
+    return str(value.quantize(quant, rounding=ROUND_HALF_UP))
+
+
+def quantity_text(value: Decimal) -> str:
+    if value.is_nan():
+        return "-"
+    if value == value.to_integral_value():
+        return str(int(value))
+    return str(q2(value))
+
+
+def parse_sina_orderbook_side(parts: list[str], start: int, side: str) -> list[dict[str, str]]:
+    rows = []
+    for index in range(5):
+        qty = dec(parts[start + index * 2])
+        price = dec(parts[start + index * 2 + 1])
+        rows.append(
+            {
+                "level": index + 1,
+                "side": side,
+                "price": decimal_text(price, 3),
+                "quantity": quantity_text(qty),
+            }
+        )
+    return rows
+
+
+def fetch_sina_quote_boards(date_compact: str, codes: list[str], config: dict) -> dict[str, dict]:
+    timeout_seconds = float(config.get("quote_board_request_timeout_seconds", config.get("realtime_request_timeout_seconds", 3)))
+    attempts = int(config.get("quote_board_request_attempts", 1))
+    symbols = ",".join(f"sh{code}" for code in codes)
+    text = request_text(
+        SINA_SNAPSHOT_URL.format(symbols=symbols),
+        headers={"Referer": "https://finance.sina.com.cn/"},
+        timeout=timeout_seconds,
+        attempts=attempts,
+    )
+    rows = parse_sina_snapshot_rows(text, codes)
+    boards: dict[str, dict] = {}
+    for code in codes:
+        parts = rows[code]
+        if len(parts) < 32:
+            raise RuntimeError(f"{code}新浪五档行情字段不足")
+        quote_date = str(parts[30]).strip()
+        quote_time = str(parts[31]).strip()
+        last = dec(parts[3])
+        previous_close = dec(parts[2])
+        change = last - previous_close
+        pct = Decimal("NaN")
+        if not previous_close.is_nan() and previous_close != 0:
+            pct = change / previous_close * Decimal("100")
+        boards[code] = {
+            "code": code,
+            "name": str(parts[0]).strip(),
+            "source": "sina_hq_snapshot",
+            "quote_time": f"{quote_date} {quote_time}".strip(),
+            "valid_for_target_date": quote_date.replace("-", "") == date_compact,
+            "last": decimal_text(last, 3),
+            "change": decimal_text(change, 3),
+            "pct_change": decimal_text(pct, 2),
+            "open": decimal_text(dec(parts[1]), 3),
+            "previous_close": decimal_text(previous_close, 3),
+            "high": decimal_text(dec(parts[4]), 3),
+            "low": decimal_text(dec(parts[5]), 3),
+            "bid_price": decimal_text(dec(parts[6]), 3),
+            "ask_price": decimal_text(dec(parts[7]), 3),
+            "volume": quantity_text(dec(parts[8])),
+            "amount": decimal_text(dec(parts[9]), 2),
+            "bids": parse_sina_orderbook_side(parts, 10, "bid"),
+            "asks": parse_sina_orderbook_side(parts, 20, "ask"),
+        }
+    return boards
+
+
 def fetch_eastmoney_realtime_prices(date_compact: str, codes: list[str], config: dict) -> tuple[str, str, dict[str, Decimal], dict]:
     max_skew_seconds = int(config.get("realtime_max_skew_seconds", 3))
     max_stale_seconds = int(config.get("realtime_max_stale_seconds", 30))
     timeout_seconds = float(config.get("realtime_request_timeout_seconds", 2))
     attempts = int(config.get("realtime_request_attempts", 1))
-    payload = request_json(
-        EASTMONEY_SNAPSHOT_URL,
-        params={
-            "fltt": "2",
-            "secids": ",".join(f"1.{code}" for code in codes),
-            "fields": "f12,f14,f2,f124",
-        },
-        headers={"Referer": "https://quote.eastmoney.com/"},
-        timeout=timeout_seconds,
-        attempts=attempts,
-    )
+    params = {
+        "fltt": "2",
+        "secids": ",".join(f"1.{code}" for code in codes),
+        "fields": "f12,f14,f2,f124",
+    }
+    headers = {"Referer": "https://quote.eastmoney.com/"}
+    transport = "curl_cffi"
+    try:
+        payload = request_json(
+            EASTMONEY_SNAPSHOT_URL,
+            params=params,
+            headers=headers,
+            timeout=timeout_seconds,
+            attempts=attempts,
+        )
+    except Exception as primary_exc:  # noqa: BLE001
+        if not bool(config.get("eastmoney_external_curl_fallback", True)):
+            raise
+        try:
+            payload = request_json_external_curl(
+                EASTMONEY_SNAPSHOT_URL,
+                params=params,
+                headers=headers,
+                timeout=timeout_seconds,
+            )
+            transport = "external_curl"
+        except Exception as fallback_exc:  # noqa: BLE001
+            raise RuntimeError(f"curl_cffi失败: {primary_exc}; external_curl失败: {fallback_exc}") from fallback_exc
     rows = ((payload.get("data") or {}).get("diff") or [])
     by_code = {str(row.get("f12")): row for row in rows}
     missing = [code for code in codes if code not in by_code]
@@ -497,6 +859,7 @@ def fetch_eastmoney_realtime_prices(date_compact: str, codes: list[str], config:
         "quote_skew_seconds": skew_seconds,
         "max_stale_seconds": max_stale_seconds,
         "max_skew_seconds": max_skew_seconds,
+        "transport": transport,
     }
     return "realtime_eastmoney", ts, prices, meta
 
@@ -513,12 +876,7 @@ def fetch_sina_realtime_prices(date_compact: str, codes: list[str], config: dict
         timeout=timeout_seconds,
         attempts=attempts,
     )
-    rows: dict[str, list[str]] = {}
-    for match in re.finditer(r'var hq_str_sh(\d+)="(.*?)";', text):
-        rows[match.group(1)] = match.group(2).split(",")
-    missing = [code for code in codes if code not in rows]
-    if missing:
-        raise RuntimeError(f"新浪实时快照缺少: {missing}")
+    rows = parse_sina_snapshot_rows(text, codes)
     prices: dict[str, Decimal] = {}
     stamps = []
     quote_times: dict[str, str] = {}
@@ -636,29 +994,21 @@ def fetch_xtquant_realtime_prices(date_compact: str, codes: list[str], config: d
 def fetch_aligned_prices(date_compact: str, codes: list[str], config: dict) -> tuple[str, str, dict[str, Decimal], dict]:
     if bool(config.get("prefer_realtime_snapshot", True)):
         realtime_errors = []
-        fetchers = {
-            "xtquant": fetch_xtquant_realtime_prices,
-            "eastmoney": fetch_eastmoney_realtime_prices,
-            "sina": fetch_sina_realtime_prices,
+        source_fetchers = {
+            "realtime_xtquant": ("xtquant", fetch_xtquant_realtime_prices),
+            "realtime_eastmoney": ("eastmoney", fetch_eastmoney_realtime_prices),
+            "realtime_sina_snapshot": ("sina", fetch_sina_realtime_prices),
         }
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers))
-        try:
-            futures = {
-                executor.submit(fetcher, date_compact, codes, config): name
-                for name, fetcher in fetchers.items()
-            }
-            for future in concurrent.futures.as_completed(futures):
-                name = futures[future]
-                try:
-                    result = future.result()
-                    for pending in futures:
-                        if pending is not future:
-                            pending.cancel()
-                    return result
-                except Exception as exc:  # noqa: BLE001
-                    realtime_errors.append(f"{name}: {exc}")
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+        configured_sources = config.get("strict_realtime_price_sources", ["realtime_eastmoney"])
+        selected_sources = [str(source) for source in configured_sources if str(source) in source_fetchers]
+        if not selected_sources:
+            selected_sources = ["realtime_eastmoney"]
+        for source in selected_sources:
+            name, fetcher = source_fetchers[source]
+            try:
+                return fetcher(date_compact, codes, config)
+            except Exception as exc:  # noqa: BLE001
+                realtime_errors.append(f"{name}: {exc}")
         if bool(config.get("require_realtime_snapshot", False)):
             raise RuntimeError("实时快照不可用，拒绝使用分钟线计算a: " + " | ".join(realtime_errors))
         print(f"WARN: 实时快照不可用，降级到分钟行情: {' | '.join(realtime_errors)}", file=sys.stderr)
@@ -774,6 +1124,9 @@ def prepare_calculation_context(date_compact: str, config: dict) -> CalculationC
     if pcf.trading_day != date_compact:
         raise RuntimeError(f"PCF日期不匹配: 期望{date_compact}, 实际{pcf.trading_day}")
     interests = get_interests(date_compact, pcf, config)
+    for code, (interest, source) in interests.items():
+        validate_interest_value(code, interest, source)
+    save_interest_cache(interests, date_compact)
     codes = [ETF_CODE] + [c.code for c in pcf.components]
     return CalculationContext(date=date_compact, pcf=pcf, interests=interests, codes=codes)
 
@@ -808,14 +1161,29 @@ def calculate_a_with_context(context: CalculationContext, config: dict) -> dict:
     component_rows = formula["component_rows"]
     calculation_elapsed_ms = int((time.perf_counter() - started) * 1000)
     save_interest_cache(
-        {row["code"]: (dec(row["interest"]), row["interest_source"]) for row in component_rows}
+        {row["code"]: (dec(row["interest"]), row["interest_source"]) for row in component_rows},
+        context.date,
     )
+    quote_times = quote_meta.get("quote_times", {}) if isinstance(quote_meta.get("quote_times"), dict) else {}
+    security_names = {ETF_CODE: str(config.get("fund_name", "511130"))}
+    security_names.update({component.code: component.name for component in pcf.components})
+    quote_rows = [
+        {
+            "code": code,
+            "name": security_names.get(code, code),
+            "price": str(q3(prices[code])),
+            "quote_time": quote_times.get(code, ts),
+            "source": price_source,
+        }
+        for code in context.codes
+        if code in prices
+    ]
     return {
         "date": context.date,
         "timestamp": ts,
         "price_source": price_source,
         "strict_realtime": quote_meta.get("strict_realtime", False),
-        "quote_times": quote_meta.get("quote_times", {}),
+        "quote_times": quote_times,
         "quote_skew_seconds": quote_meta.get("quote_skew_seconds"),
         "calculated_at": datetime.now(TZ).isoformat(timespec="milliseconds"),
         "calculation_elapsed_ms": calculation_elapsed_ms,
@@ -829,6 +1197,7 @@ def calculate_a_with_context(context: CalculationContext, config: dict) -> dict:
         "estimated_a": str(q2(formula["estimated_a"])),
         "record_number": pcf.record_number,
         "components": component_rows,
+        "quotes": quote_rows,
     }
 
 
@@ -876,6 +1245,15 @@ def append_result(date_compact: str, result: dict) -> None:
         writer.writerow({k: result[k] for k in writer.fieldnames})
 
 
+def safe_append_result(date_compact: str, result: dict) -> bool:
+    try:
+        append_result(date_compact, result)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: a值结果写盘失败: {exc}", file=sys.stderr)
+        return False
+
+
 def validate_result_invariants(config: dict, result: dict) -> None:
     if not bool(config.get("require_realtime_snapshot", False)):
         return
@@ -898,9 +1276,30 @@ def validate_result_invariants(config: dict, result: dict) -> None:
 
 
 def alert_source_mode(config: dict) -> str:
+    override = str(config.get("alert_source_mode_override", "")).strip()
+    if override:
+        return override
     if bool(config.get("require_realtime_snapshot", False)):
         return "strict_realtime_v1"
     return "legacy_price_source"
+
+
+def alert_mode_state(day_state: dict, source_mode: str) -> dict:
+    source_modes = day_state.setdefault("source_modes", {})
+    if not isinstance(source_modes, dict):
+        source_modes = {}
+        day_state["source_modes"] = source_modes
+    mode_state = source_modes.get(source_mode)
+    if not isinstance(mode_state, dict):
+        mode_state = {}
+        if day_state.get("alert_source_mode") in {None, source_mode}:
+            mode_state["active_thresholds"] = day_state.get("active_thresholds", [])
+            mode_state["above_counts"] = day_state.get("above_counts", {})
+        else:
+            mode_state["active_thresholds"] = []
+            mode_state["above_counts"] = {}
+        source_modes[source_mode] = mode_state
+    return mode_state
 
 
 def detect_alerts(
@@ -916,50 +1315,81 @@ def detect_alerts(
     state = load_state()
     day_state = state.setdefault("dates", {}).setdefault(date_compact, {"active_thresholds": []})
     source_mode = alert_source_mode(config)
-    if day_state.get("alert_source_mode") != source_mode:
-        day_state["active_thresholds"] = []
-        day_state["above_counts"] = {}
-        day_state["alert_source_mode"] = source_mode
-        day_state["source_mode_switched_at"] = datetime.now(TZ).isoformat(timespec="seconds")
-    active = {Decimal(str(x)) for x in day_state.get("active_thresholds", [])}
-    above_counts = {Decimal(str(k)): int(v) for k, v in (day_state.get("above_counts") or {}).items()}
+    mode_state = alert_mode_state(day_state, source_mode)
+    active = {Decimal(str(x)) for x in mode_state.get("active_thresholds", [])}
+    above_counts = {Decimal(str(k)): int(v) for k, v in (mode_state.get("above_counts") or {}).items()}
     alerts: list[Decimal] = []
-    for threshold in sorted(thresholds):
-        count = above_counts.get(threshold, 0)
-        if value > threshold and threshold not in active:
-            count += 1
-            above_counts[threshold] = count
-            if count >= confirm_count:
-                alerts.append(threshold)
-                active.add(threshold)
-        elif value <= threshold:
-            above_counts[threshold] = 0
-        if reset and value <= threshold - reset_buffer and threshold in active:
-            active.remove(threshold)
-            above_counts[threshold] = 0
-    day_state["active_thresholds"] = [str(x) for x in sorted(active)]
-    day_state["above_counts"] = {str(k): v for k, v in sorted(above_counts.items())}
+    positive_thresholds = sorted({abs(threshold) for threshold in thresholds if abs(threshold) > 0})
+    for threshold in positive_thresholds:
+        positive_key = threshold
+        negative_key = -threshold
+
+        positive_count = above_counts.get(positive_key, 0)
+        if value >= threshold and positive_key not in active:
+            positive_count += 1
+            above_counts[positive_key] = positive_count
+            if positive_count >= confirm_count:
+                alerts.append(positive_key)
+                active.add(positive_key)
+        elif value < threshold:
+            above_counts[positive_key] = 0
+        if reset and value <= threshold - reset_buffer and positive_key in active:
+            active.remove(positive_key)
+            above_counts[positive_key] = 0
+
+        negative_count = above_counts.get(negative_key, 0)
+        if value <= negative_key and negative_key not in active:
+            negative_count += 1
+            above_counts[negative_key] = negative_count
+            if negative_count >= confirm_count:
+                alerts.append(negative_key)
+                active.add(negative_key)
+        elif value > negative_key:
+            above_counts[negative_key] = 0
+        if reset and value >= negative_key + reset_buffer and negative_key in active:
+            active.remove(negative_key)
+            above_counts[negative_key] = 0
+    mode_state["active_thresholds"] = [str(x) for x in sorted(active)]
+    mode_state["above_counts"] = {str(k): v for k, v in sorted(above_counts.items())}
+    mode_state["updated_at"] = datetime.now(TZ).isoformat(timespec="seconds")
+    day_state["active_thresholds"] = mode_state["active_thresholds"]
+    day_state["above_counts"] = mode_state["above_counts"]
     day_state["alert_source_mode"] = source_mode
     day_state["last_price_source"] = result.get("price_source")
     day_state["last_strict_realtime"] = result.get("strict_realtime") is True
     day_state["last_quote_skew_seconds"] = result.get("quote_skew_seconds")
     day_state["last_a"] = str(q2(value))
     day_state["updated_at"] = datetime.now(TZ).isoformat(timespec="seconds")
-    save_state(state)
+    try:
+        save_state(state)
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: 预警状态写盘失败，使用进程内状态继续运行: {exc}", file=sys.stderr)
     return alerts
 
 
-def rollback_alerts(date_compact: str, alerts: list[Decimal]) -> None:
+def format_alert_thresholds(alerts: list[Decimal]) -> str:
+    return ", ".join(money(alert, signed=True) for alert in alerts)
+
+
+def rollback_alerts(date_compact: str, alerts: list[Decimal], config: dict | None = None) -> None:
     if not alerts:
         return
     state = load_state()
     day_state = state.setdefault("dates", {}).setdefault(date_compact, {"active_thresholds": []})
-    active = {Decimal(str(x)) for x in day_state.get("active_thresholds", [])}
+    source_mode = alert_source_mode(config or {})
+    mode_state = alert_mode_state(day_state, source_mode)
+    active = {Decimal(str(x)) for x in mode_state.get("active_thresholds", [])}
     for threshold in alerts:
         active.discard(threshold)
-    day_state["active_thresholds"] = [str(x) for x in sorted(active)]
+    mode_state["active_thresholds"] = [str(x) for x in sorted(active)]
+    mode_state["updated_at"] = datetime.now(TZ).isoformat(timespec="seconds")
+    day_state["active_thresholds"] = mode_state["active_thresholds"]
+    day_state["alert_source_mode"] = source_mode
     day_state["updated_at"] = datetime.now(TZ).isoformat(timespec="seconds")
-    save_state(state)
+    try:
+        save_state(state)
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: 预警状态回滚写盘失败，使用进程内状态继续运行: {exc}", file=sys.stderr)
 
 
 def append_alert_result(
@@ -987,6 +1417,15 @@ def append_alert_result(
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def safe_append_alert_result(*args, **kwargs) -> bool:  # noqa: ANN002, ANN003
+    try:
+        append_alert_result(*args, **kwargs)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: 预警事件写盘失败: {exc}", file=sys.stderr)
+        return False
+
+
 def append_notification_event(
     date_compact: str,
     *,
@@ -1010,6 +1449,8 @@ def append_notification_event(
         "etf_quote": result.get("etf_quote"),
         "price_source": result.get("price_source"),
         "strict_realtime": result.get("strict_realtime"),
+        "data_quality": result.get("data_quality"),
+        "data_quality_note": result.get("data_quality_note"),
         "quote_skew_seconds": result.get("quote_skew_seconds"),
         "calculation_elapsed_ms": result.get("calculation_elapsed_ms"),
     }
@@ -1030,10 +1471,19 @@ def append_notification_event(
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def safe_append_notification_event(*args, **kwargs) -> bool:  # noqa: ANN002, ANN003
+    try:
+        append_notification_event(*args, **kwargs)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARN: 通知事件写盘失败: {exc}", file=sys.stderr)
+        return False
+
+
 def print_result(result: dict, alerts: list[Decimal] | None = None) -> None:
     a_value = dec(result["estimated_a"])
     if alerts:
-        print("ALERT: 511130预估a达到实验观察阈值 " + ", ".join(f"+{money(x)}" for x in alerts))
+        print("ALERT: 511130预估a达到实验观察阈值 " + format_alert_thresholds(alerts))
     else:
         print("OK: 本轮未触发新阈值")
     print(f"时间: {result['timestamp']} ({result['price_source']})")
@@ -1058,8 +1508,13 @@ def _format_component_price_snapshot(result: dict) -> str:
 
 def format_result_message(result: dict, alerts: list[Decimal]) -> str:
     lines = []
+    if str(result.get("data_quality", "")).strip() == "degraded":
+        lines.append("数据质量: 降级行情候选预警")
+        note = str(result.get("data_quality_note", "")).strip()
+        if note:
+            lines.append(f"说明: {note}")
     if alerts:
-        lines.append("触发档位: " + ", ".join(f"+{money(x)}" for x in alerts))
+        lines.append("触发档位: " + format_alert_thresholds(alerts))
         lines.append("触发状态: 已触发")
     else:
         lines.append("触发状态: 未触发")
@@ -1081,13 +1536,13 @@ def format_result_message(result: dict, alerts: list[Decimal]) -> str:
 def mode_precheck(config: dict, notify: bool = False) -> int:
     target_date = config["target_date"]
     compare_date = config.get("compare_date", "20260612")
+    if notify:
+        print("WARN: --notify only sends threshold alerts in once mode; precheck never sends Feishu messages.")
     try:
         current = fetch_pcf(target_date, config.get("fund_code", ETF_CODE))
     except Exception as exc:  # noqa: BLE001
         message = f"PCF_NOT_READY: {target_date} 清单未更新或不可读: {exc}"
         print(message)
-        if notify:
-            send_notification(config, "511130 PCF清单检查", message)
         return 0
     base = fetch_pcf(compare_date, config.get("fund_code", ETF_CODE))
     print(f"PCF_READY: {target_date} TradingDay={current.trading_day}; RecordNumber={current.record_number}; EstimatedCash={money(current.estimated_cash_component)}")
@@ -1108,18 +1563,20 @@ def mode_precheck(config: dict, notify: bool = False) -> int:
         line = f"INTEREST_NOT_READY: {exc}"
         print(line)
         lines.append(line)
-        if notify:
-            send_notification(config, "511130 PCF清单检查", "\n".join(lines))
         return 0
-    if notify:
-        send_notification(config, "511130 PCF清单检查", "\n".join(lines))
     return 0
 
 
-def handle_calculation_result(config: dict, result: dict, notify: bool = False, notify_no_alert: bool = True) -> int:
+def handle_calculation_result(
+    config: dict,
+    result: dict,
+    notify: bool = False,
+    notify_no_alert: bool = False,
+    alert_title: str = "511130 a值预警",
+) -> int:
     target_date = config["target_date"]
     validate_result_invariants(config, result)
-    append_result(target_date, result)
+    safe_append_result(target_date, result)
     thresholds = [dec(x) for x in config.get("thresholds", [300])]
     a_value = dec(result["estimated_a"])
     alerts = detect_alerts(
@@ -1131,13 +1588,13 @@ def handle_calculation_result(config: dict, result: dict, notify: bool = False, 
         result,
     )
     notification_result: dict | bool | None = None
-    title = "511130 a值预警" if alerts else "511130 预警机器人运行检查"
-    if notify and (alerts or notify_no_alert):
+    title = alert_title
+    if notify and alerts:
         try:
-            notification_result = send_notification(config, title, format_result_message(result, alerts))
+            notification_result = send_notification_with_retries(config, title, format_result_message(result, alerts))
             if not isinstance(notification_result, dict) or notification_result.get("ok") is not True:
                 raise RuntimeError(f"通知失败: 未返回成功结果 {notification_result}")
-            append_notification_event(
+            safe_append_notification_event(
                 target_date,
                 title=title,
                 result=result,
@@ -1146,7 +1603,7 @@ def handle_calculation_result(config: dict, result: dict, notify: bool = False, 
                 notification_result=notification_result,
             )
         except Exception as exc:
-            append_notification_event(
+            safe_append_notification_event(
                 target_date,
                 title=title,
                 result=result,
@@ -1155,9 +1612,9 @@ def handle_calculation_result(config: dict, result: dict, notify: bool = False, 
                 notification_result=notification_result,
                 error=exc,
             )
-            rollback_alerts(target_date, alerts)
+            rollback_alerts(target_date, alerts, config)
             raise
-    append_alert_result(
+    safe_append_alert_result(
         target_date,
         alerts,
         result,
@@ -1168,7 +1625,7 @@ def handle_calculation_result(config: dict, result: dict, notify: bool = False, 
     return 0
 
 
-def mode_once(config: dict, notify: bool = False, notify_no_alert: bool = True) -> int:
+def mode_once(config: dict, notify: bool = False, notify_no_alert: bool = False) -> int:
     target_date = config["target_date"]
     result = calculate_a(target_date, config)
     return handle_calculation_result(config, result, notify=notify, notify_no_alert=notify_no_alert)
@@ -1178,7 +1635,7 @@ def mode_once_with_context(
     config: dict,
     context: CalculationContext,
     notify: bool = False,
-    notify_no_alert: bool = True,
+    notify_no_alert: bool = False,
 ) -> int:
     result = calculate_a_with_context(context, config)
     return handle_calculation_result(config, result, notify=notify, notify_no_alert=notify_no_alert)
@@ -1193,7 +1650,7 @@ def mode_test_notify(config: dict) -> int:
     )
     result = send_notification(config, title, message)
     if isinstance(result, dict) and result.get("ok") is True:
-        append_notification_event(
+        safe_append_notification_event(
             str(config.get("target_date") or datetime.now(TZ).strftime("%Y%m%d")),
             title=title,
             result=None,
@@ -1264,7 +1721,7 @@ def mode_selftest() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="511130 live estimated-a monitor")
     parser.add_argument("--mode", choices=["precheck", "once", "test", "selftest"], required=True)
-    parser.add_argument("--notify", action="store_true", help="send webhook notification for precheck results and once-mode checks")
+    parser.add_argument("--notify", action="store_true", help="send webhook notification only when a valid once-mode calculation crosses a threshold")
     parser.add_argument("--date", help="override target date, e.g. 20260615")
     parser.add_argument("--compare-date", help="override compare date, e.g. 20260612")
     args = parser.parse_args()
@@ -1289,9 +1746,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except Exception as exc:  # noqa: BLE001
         print(f"ERROR: {exc}", file=sys.stderr)
-        try:
-            config = load_config()
-            send_notification(config, "511130监控错误", f"ERROR: {exc}")
-        except Exception:
-            pass
         raise SystemExit(1)

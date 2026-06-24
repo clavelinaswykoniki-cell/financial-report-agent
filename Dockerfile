@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata \
+    && apt-get install -y --no-install-recommends ca-certificates curl tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/511130_live_monitor/requirements.txt /app/requirements.txt
@@ -16,4 +16,4 @@ COPY scripts/511130_live_monitor /app/scripts/511130_live_monitor
 
 EXPOSE 8787
 
-CMD ["python", "-u", "scripts/511130_live_monitor/live_a_dashboard.py", "--host", "0.0.0.0", "--auto-run", "--interval", "1"]
+CMD ["python", "-u", "scripts/511130_live_monitor/live_a_dashboard.py", "--host", "0.0.0.0", "--auto-run", "--auto-run-notify", "--interval", "3"]

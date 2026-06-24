@@ -1,6 +1,6 @@
 {
   "fund_code": "511130",
-  "target_date": "20260615",
+  "target_date": "auto",
   "compare_date": "20260612",
   "expected_component_codes": [
     "019776",
@@ -8,8 +8,7 @@
   ],
   "thresholds": [
     300,
-    500,
-    800
+    500
   ],
   "reset_below_threshold": true,
   "interest_overrides": {
@@ -19,26 +18,78 @@
     }
   },
   "allow_interest_fallback": false,
+  "allow_same_day_interest_cache": true,
   "data_sources": {
     "pcf": "bosera",
     "interest": "sse_netfull_then_manual_override",
-    "intraday": "optional_xtquant_then_eastmoney_realtime_then_sina_realtime_snapshot"
+    "intraday": "eastmoney_realtime_snapshot_only"
   },
   "enable_xtquant_snapshot": false,
   "strict_realtime_price_sources": [
-    "realtime_xtquant",
-    "realtime_eastmoney",
-    "realtime_sina_snapshot"
+    "realtime_eastmoney"
   ],
   "prefer_realtime_snapshot": true,
   "require_realtime_snapshot": true,
   "realtime_max_skew_seconds": 3,
   "realtime_max_stale_seconds": 30,
   "realtime_request_timeout_seconds": 3,
-  "realtime_request_attempts": 1,
+  "realtime_request_attempts": 2,
+  "eastmoney_external_curl_fallback": true,
   "alert_confirmations": 1,
   "alert_reset_buffer": "20",
+  "degraded_alert_enabled": true,
+  "degraded_alert_title": "511130 a值候选预警（降级行情）",
+  "degraded_alert_source_mode": "degraded_price_source_v1",
   "notification_timeout_seconds": 3,
+  "notification_attempts": 3,
+  "notification_retry_delay_seconds": "1",
+  "pcf_not_ready_retry_seconds": 300,
+  "auto_run_market_hours_only": true,
+  "auto_run_closed_dates": [
+    "20260101",
+    "20260102",
+    "20260103",
+    "20260215",
+    "20260216",
+    "20260217",
+    "20260218",
+    "20260219",
+    "20260220",
+    "20260221",
+    "20260222",
+    "20260223",
+    "20260404",
+    "20260405",
+    "20260406",
+    "20260501",
+    "20260502",
+    "20260503",
+    "20260504",
+    "20260505",
+    "20260619",
+    "20260620",
+    "20260621",
+    "20260925",
+    "20260926",
+    "20260927",
+    "20261001",
+    "20261002",
+    "20261003",
+    "20261004",
+    "20261005",
+    "20261006",
+    "20261007"
+  ],
+  "auto_run_sessions": [
+    [
+      "09:25",
+      "11:35"
+    ],
+    [
+      "12:55",
+      "15:10"
+    ]
+  ],
   "allow_missing_interest_fallback": false,
   "missing_interest_default": "0",
   "notification": {
