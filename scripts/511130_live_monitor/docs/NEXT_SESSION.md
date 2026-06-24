@@ -16,7 +16,8 @@
 - Default dashboard auto-run/browser refresh is now 3 seconds in `live_a_dashboard.py`, `Dockerfile`, and `railway.toml`; strict realtime still requires Eastmoney source, max 3-second quote skew, and max 30-second stale age.
 - Local Chrome verification passed on `127.0.0.1:8799`: `cardCount=4`, `quoteCards=3`, `hasA=true`, `orderRows=30`, `sparkLines=3`, `adjacentGap=0`, no viewport overflow. Screenshot: `scripts/511130_live_monitor/docs/artifacts/511130-four-card-strip-chrome-20260624.png`.
 - Local verification passed: `python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py scripts/511130_live_monitor/monitor_511130.py scripts/511130_live_monitor/daily_actual_a_report.py scripts/511130_live_monitor/smoke_check.py tests/test_511130_live_monitor.py`; `python3.12 -m unittest tests.test_511130_live_monitor` returned 91 tests OK.
-- This 2026-06-24 change has not been deployed to Railway yet.
+- This 2026-06-24 four-card market-strip change has been deployed to Railway production as `7ab73f6a-ce74-4ec2-ac7f-d9c7311a13e9`.
+- Production read-only smoke passed with `ok=true` and `issues=[]`; production `/api/data` returned 3 quote cards and 30 order-book rows; production Chrome DOM verification returned `cardCount=4`, `hasA=true`, `sparkLines=3`, and `adjacentGap=0`.
 - Local 2026-06-23 A-curve run is complete but not deployed to Railway.
 - 511130 last-week open-day 1-minute estimated/actual A summary is at `reports/511130_daily_actual_a/summary_511130_1m_estimated_actual_a_20260615_20260618.csv`; overview SVG is at `reports/511130_daily_actual_a/511130_1m_estimated_actual_a_20260615_20260618.svg`.
 - 511090 2026-06-08 through 2026-06-18 daily-close estimated/actual A output is at `reports/511090_a_20260608_20260618/`; it is daily close only, not intraday, because no stable public historical minute source was available for the component bonds.
@@ -30,8 +31,8 @@
 https://511130-live-monitor-production.up.railway.app
 ```
 
-- Latest verified deployment: `6ad1ba11-56b8-4a75-a52c-43252aa79673`.
-- Runtime patch is live: `target_date=auto`, market-hours auto-run gate, Eastmoney system-curl fallback, guarded auto loop, lightweight `/health`, 15-second auto polling, and `--auto-run-notify`. Local code now changes the intended next deploy interval to 3 seconds.
+- Latest verified deployment: `7ab73f6a-ce74-4ec2-ac7f-d9c7311a13e9`.
+- Runtime patch is live: `target_date=auto`, market-hours auto-run gate, Eastmoney system-curl fallback, guarded auto loop, lightweight `/health`, 3-second auto/browser refresh polling, and `--auto-run-notify`.
 - Railway Feishu webhook and signing secret are configured through env vars. Do not write or print raw webhook or secret values in repo docs.
 - Real Feishu test succeeded on 2026-06-16 12:25 CST: `POST /api/notify-test` returned `ok=true`, Feishu business response code `0`, message `success`.
 - A final doc-only Railway deploy happened after the Feishu test. No extra Feishu message was sent; latest `/health` still showed `process_ok=true`, `auto_loop.code=running`, and `notification.diagnostics=sent`.
@@ -85,7 +86,7 @@ python3.12 scripts/511130_live_monitor/daily_actual_a_report.py --no-retry
 
 ## Highest Priority Next
 
-- If the user wants the new quote-card UI, four-card horizontal strip, and 3-second interval online, deploy Railway and run read-only production smoke before trusting the public URL.
+- During the next trading session, confirm strict realtime a resumes on the deployed four-card dashboard.
 - If the user wants the new `±300/±500` behavior online, deploy and run read-only production smoke before trusting Railway.
 - If the user asks for 511090 intraday curves, first secure an auditable minute-level source for its component bonds; otherwise keep the result labeled daily-close only.
 - During the next trading session, check whether strict realtime a resumes.

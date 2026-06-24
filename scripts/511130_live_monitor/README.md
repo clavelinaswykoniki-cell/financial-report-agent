@@ -189,7 +189,7 @@ https://511130-live-monitor-production.up.railway.app
 
 最新生产验收：
 
-- 部署 ID：`6ad1ba11-56b8-4a75-a52c-43252aa79673`
+- 部署 ID：`7ab73f6a-ce74-4ec2-ac7f-d9c7311a13e9`
 - `smoke_check.py` 线上只读检查通过。
 - 飞书 webhook 和签名密钥通过 Railway env 配置；`POST /api/notify-test` 已返回飞书业务码 `0`、`success`。
 - 原始 webhook 和签名密钥不要写入 README、docs 或提交说明。

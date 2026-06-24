@@ -7,6 +7,7 @@
 - Kept the five-level order book as display-only Sina snapshot data; strict current-a calculation and Feishu alerts remain locked to Eastmoney realtime snapshots.
 - Changed the default dashboard, Docker, and Railway auto-run refresh interval to 3 seconds while preserving 3-second quote-skew and 30-second stale-data guards.
 - Added regression coverage for Sina five-level order-book parsing, `/api/data.quote_cards` synthesis, and the connected four-card dashboard HTML; full `tests.test_511130_live_monitor` passes with 91 tests.
+- Deployed to Railway production as `7ab73f6a-ce74-4ec2-ac7f-d9c7311a13e9`; read-only production smoke passed, `/api/data` returned 3 quote cards and 30 order-book rows, and Chrome DOM verification showed four connected cards with `adjacentGap=0`.
 
 ## 2026-06-23
 

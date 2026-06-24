@@ -12,7 +12,10 @@
 - 每只证券小分时线以东方财富 1 分钟分时为底图，失败时用新浪 1 分钟兜底，并叠加本地已保存的严格实时计算点；1 分钟底图有缓存，不按 3 秒高频轮询。
 - 默认 dashboard / Docker / Railway 自动刷新间隔已改为 3 秒。上游行情时间戳不更新时，3 秒刷新只会展示重复快照。
 - 本地 Chrome 验收通过：`cardCount=4`，`quoteCards=3`，`hasA=true`，`orderRows=30`，`sparkLines=3`，`gridColumns=312px 312px 312px 312px`，`adjacentGap=0`。
-- 本轮未发飞书、未做任何交易或下单动作。Railway 部署将在本轮后续按用户授权执行。
+- 已按用户授权推送 GitHub 并部署 Railway production：`7ab73f6a-ce74-4ec2-ac7f-d9c7311a13e9`。
+- 线上只读 smoke 通过：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`、`notification_configured=true`、`allowed_price_sources=['realtime_eastmoney']`、`max_skew_seconds=3`、`max_stale_seconds=30`。
+- 线上 `/api/data` 返回 3 张行情卡和 30 行五档盘口；线上 Chrome DOM 验收通过：`cardCount=4`、`hasA=true`、`sparkLines=3`、`adjacentGap=0`。
+- 本轮未发飞书测试消息、未做任何交易或下单动作。
 
 修改文件：
 
@@ -27,16 +30,25 @@
 - `scripts/511130_live_monitor/docs/HANDOFF.md`
 - `scripts/511130_live_monitor/docs/TASKS.md`
 - `scripts/511130_live_monitor/docs/NEXT_SESSION.md`
+- `scripts/511130_live_monitor/docs/DECISIONS.md`
+- `scripts/511130_live_monitor/docs/artifacts/511130-four-card-strip-chrome-20260624.png`
+- `scripts/511130_live_monitor/history_seed/runs/`
+- `scripts/511130_live_monitor/daily_actual_a_report.py`
+- `scripts/511130_live_monitor/smoke_check.py`
+- `scripts/511130_live_monitor/seed_history_curves.py`
 
 验证：
 
 - `python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py scripts/511130_live_monitor/monitor_511130.py scripts/511130_live_monitor/daily_actual_a_report.py scripts/511130_live_monitor/smoke_check.py tests/test_511130_live_monitor.py`
 - `python3.12 -m unittest tests.test_511130_live_monitor`，91 tests OK。
 - 本地 `127.0.0.1:8799` Chrome 验收横向四联卡，截图保存到 `scripts/511130_live_monitor/docs/artifacts/511130-four-card-strip-chrome-20260624.png`。
+- `python3.12 scripts/511130_live_monitor/smoke_check.py https://511130-live-monitor-production.up.railway.app --json`，线上只读 smoke OK。
+- 线上 Chrome DOM 验收：`cardCount=4`、`quoteCards=3`、`hasA=true`、`orderRows=30`、`sparkLines=3`、`adjacentGap=0`。
 
 下一步：
 
-- 推送 GitHub 后等待 Railway 部署，再跑只读 `smoke_check.py`；不要用 `/api/notify-test`，除非用户明确要发真实飞书测试。
+- 下一个交易时段确认严格实时 a 是否恢复展示；如果仍为 `market_closed` 或 `data_ok=false`，先看 `/health.diagnostics.pcf/quote/notification`，不要放宽 3 秒同步、30 秒新鲜度或缺利息不兜底规则。
+- 不要用 `/api/notify-test`，除非用户明确要发真实飞书测试。
 
 ## 2026-06-23 511130/511090 A Curve And Debug Audit
 
