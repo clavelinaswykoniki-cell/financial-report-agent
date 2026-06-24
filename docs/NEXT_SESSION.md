@@ -12,7 +12,7 @@
 ## Current State
 
 - 511130 看板布局调整已上线：顶部大号当前 a 统计块已移除，四联行情卡上移，历史曲线移动到四联卡下方。
-- GitHub 分支：`codex/511130-a-monitor`；布局提交：`6b29e98`；Railway production deployment：`97db306a-2342-4555-a6f5-20747807eec3`。
+- GitHub 分支：`codex/511130-a-monitor`；布局提交：`6b29e98`；Railway production 最新成功 deployment 以 `railway deployment list --json` 的同分支记录为准。
 - 当前接续任务是 `scripts/511130_live_monitor` 的 511130 行情更新频率和看板状态确认。
 - 3 秒更新任务已完成：`live_a_dashboard.py` 默认 `--interval=3`，前端按 `cfg.refreshSec * 1000` 轮询，Dockerfile 和 `railway.toml` 均用 `--interval 3`。
 - 本地验证通过：`python3.12 -m py_compile ...` 无错误；`python3.12 -m unittest tests.test_511130_live_monitor` 通过 91 个测试。

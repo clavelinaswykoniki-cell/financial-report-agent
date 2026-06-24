@@ -5,7 +5,7 @@
 当前状态：
 
 - 已按用户确认的效果图调整 511130 团队看板首屏。
-- 已提交、推送并部署 Railway production：`97db306a-2342-4555-a6f5-20747807eec3`，分支 `codex/511130-a-monitor`，提交 `6b29e98`。
+- 已提交、推送并部署 Railway production；分支 `codex/511130-a-monitor`，布局提交 `6b29e98`，最终 deployment ID 以 Railway 最新同分支 `SUCCESS` 记录为准。
 - 删除原顶部左侧大统计块：`当前 a 值`、`511130 价格`、`距离 300`、`行情时间差`、`最新计算时间`、`飞书最近状态`、`点位数` 和盘外/休市提示不再单独占据左上大面板。
 - 四联行情卡现在紧跟标题栏显示：`511130`、`019776`、`019837`、`套利值A`。
 - 历史曲线 / a-K线移动到四联卡下方，标题改为 `历史曲线 / a-K线`。
@@ -29,7 +29,7 @@
 - 本地截图：`tmp/511130-dashboard-reorder-local.png`。
 - 线上只读 smoke：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`、`data_status_code=market_closed`。
 - 线上 HTML/DOM：`refreshSec3=true`、`quote_before_chart=true`、`has_primary_value=false`、`has_latest_a=false`、`chart_title=true`。
-- Railway deployment list 确认 `97db306a-2342-4555-a6f5-20747807eec3` 是 `codex/511130-a-monitor` / `6b29e98` 的 `SUCCESS`，Dockerfile 和 `--interval 3` 启动命令生效。
+- Railway deployment list 确认 `codex/511130-a-monitor` 分支部署 `SUCCESS`，Dockerfile 和 `--interval 3` 启动命令生效。
 
 运维注意：
 

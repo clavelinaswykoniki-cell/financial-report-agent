@@ -3,7 +3,7 @@
 ## 2026-06-24
 
 - 511130 团队看板布局调整已上线：去掉顶部大号当前 a 统计块，四联行情卡上移到首屏，历史曲线移动到四联卡下方；公式、行情源、阈值和飞书逻辑未改。
-- 发布链路：GitHub `codex/511130-a-monitor`，布局提交 `6b29e98`，Railway deployment `97db306a-2342-4555-a6f5-20747807eec3`，生产地址 `https://511130-live-monitor-production.up.railway.app`。
+- 发布链路：GitHub `codex/511130-a-monitor`，布局提交 `6b29e98`，生产地址 `https://511130-live-monitor-production.up.railway.app`；Railway deployment ID 以最新同分支 `SUCCESS` 记录为准。
 - 接续检查 `scripts/511130_live_monitor` 的“加快行情更新频率”任务。
 - 代码已确认：`live_a_dashboard.py` 默认 `--interval=3`，前端按 `cfg.refreshSec * 1000` 轮询，Dockerfile 和 `railway.toml` 启动命令均使用 `--interval 3`。
 - 线上只读 smoke 通过：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`。

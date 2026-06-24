@@ -8,7 +8,6 @@
 
 - 分支：`codex/511130-a-monitor`
 - 代码提交：`6b29e98 feat: reorder 511130 dashboard layout`
-- Railway deployment：`97db306a-2342-4555-a6f5-20747807eec3`
 - 生产地址：`https://511130-live-monitor-production.up.railway.app`
 
 改动：
@@ -25,7 +24,7 @@
 - 本地 Chrome 截图：`tmp/511130-dashboard-reorder-local.png`，DOM 检查 `cards=4`、`hasPrimary=false`、`hasLatestA=false`、`chartBelowQuote=true`。
 - 线上只读 smoke：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`、`data_status_code=market_closed`。
 - 线上 HTML/DOM：`refreshSec3=true`、`quote_before_chart=true`、`has_primary_value=false`、`has_latest_a=false`、`chart_title=true`。
-- Railway source 确认为 `codex/511130-a-monitor`，Dockerfile 和 `--auto-run --auto-run-notify --interval 3` 启动命令生效。
+- Railway source 确认为 `codex/511130-a-monitor`，Dockerfile 和 `--auto-run --auto-run-notify --interval 3` 启动命令生效；最终 deployment ID 以 `railway deployment list --json` 中最新 `SUCCESS` 的同分支记录为准。
 
 运维注意：
 

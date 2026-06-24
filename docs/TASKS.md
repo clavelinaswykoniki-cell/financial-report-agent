@@ -2,7 +2,7 @@
 
 ## Done
 
-- 2026-06-24: 完成并上线 511130 看板布局调整：移除顶部大号当前 a 统计块，四联行情卡上移，历史曲线放到四联卡下方；GitHub 提交 `6b29e98`，Railway deployment `97db306a-2342-4555-a6f5-20747807eec3`。
+- 2026-06-24: 完成并上线 511130 看板布局调整：移除顶部大号当前 a 统计块，四联行情卡上移，历史曲线放到四联卡下方；GitHub 布局提交 `6b29e98`，Railway 最新部署以同分支 `SUCCESS` 记录为准。
 - 2026-06-24: 接续并验证 `scripts/511130_live_monitor` 行情更新频率任务；确认本地代码、Dockerfile、`railway.toml`、模块文档均为 3 秒自动刷新/轮询。
 - 2026-06-24: 运行 511130 本地验证：`python3.12 -m py_compile ...` 无错误，`python3.12 -m unittest tests.test_511130_live_monitor` 通过 91 个测试。
 - 2026-06-24: 运行线上只读 smoke：生产 `https://511130-live-monitor-production.up.railway.app` 返回 `ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`；当前 `market_closed` 是休市状态，不是服务空转故障。
