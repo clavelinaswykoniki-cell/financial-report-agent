@@ -5,11 +5,12 @@
 当前状态：
 
 - 已按用户确认的效果图调整 511130 团队看板首屏。
+- 已提交、推送并部署 Railway production：`97db306a-2342-4555-a6f5-20747807eec3`，分支 `codex/511130-a-monitor`，提交 `6b29e98`。
 - 删除原顶部左侧大统计块：`当前 a 值`、`511130 价格`、`距离 300`、`行情时间差`、`最新计算时间`、`飞书最近状态`、`点位数` 和盘外/休市提示不再单独占据左上大面板。
 - 四联行情卡现在紧跟标题栏显示：`511130`、`019776`、`019837`、`套利值A`。
 - 历史曲线 / a-K线移动到四联卡下方，标题改为 `历史曲线 / a-K线`。
 - `套利值A` 卡仍展示当前 a、阈值、状态和严格实时说明；页面层没有改公式、行情源、阈值、飞书发送或 fail-closed 规则。
-- 本轮没有发飞书测试消息、没有部署 Railway、没有做交易或下单动作。
+- 本轮没有发飞书测试消息、没有做交易或下单动作。
 
 修改文件：
 
@@ -26,11 +27,15 @@
 - `python3.12 -m unittest tests.test_511130_live_monitor`，91 tests OK。
 - 本地只读预览 `127.0.0.1:8811` Chrome 截图通过：`cards=4`、`hasPrimary=false`、`hasLatestA=false`、`quoteTop=94`、`chartTop=639`、`chartBelowQuote=true`。
 - 本地截图：`tmp/511130-dashboard-reorder-local.png`。
+- 线上只读 smoke：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`、`data_status_code=market_closed`。
+- 线上 HTML/DOM：`refreshSec3=true`、`quote_before_chart=true`、`has_primary_value=false`、`has_latest_a=false`、`chart_title=true`。
+- Railway deployment list 确认 `97db306a-2342-4555-a6f5-20747807eec3` 是 `codex/511130-a-monitor` / `6b29e98` 的 `SUCCESS`，Dockerfile 和 `--interval 3` 启动命令生效。
 
-下一步：
+运维注意：
 
-- 用户若确认此版可上线，再提交、推送并部署 Railway。
-- 部署后跑只读 `smoke_check.py`，并确认生产 HTML 仍是 `refreshSec=3`、四联卡在图表上方。
+- Railway production 在线并挂载 `/data` volume；自动循环在 Railway 进程内运行，不依赖本地 Codex 在线。
+- `/health.public_readonly=false`，公网仍保留手动计算、配置保存和飞书测试写接口；若要公开只读看板，设置 `A_MONITOR_PUBLIC_READONLY=1`，但会禁用这些按钮。
+- headless Chrome/Edge 线上截图在本机被系统杀掉，未生成生产截图；线上 DOM 和 smoke 已通过。
 
 ## 2026-06-24 Quote Cards, Four-Card Strip, Five-Level Order Book, 3s Refresh
 

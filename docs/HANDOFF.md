@@ -2,7 +2,14 @@
 
 ## 2026-06-24 - 511130 看板布局调整
 
-状态：本地实现完成，未部署 Railway。
+状态：已提交、推送 GitHub，并部署 Railway production。
+
+发布：
+
+- 分支：`codex/511130-a-monitor`
+- 代码提交：`6b29e98 feat: reorder 511130 dashboard layout`
+- Railway deployment：`97db306a-2342-4555-a6f5-20747807eec3`
+- 生产地址：`https://511130-live-monitor-production.up.railway.app`
 
 改动：
 
@@ -16,11 +23,16 @@
 - `python3.12 -m py_compile scripts/511130_live_monitor/live_a_dashboard.py tests/test_511130_live_monitor.py`
 - `python3.12 -m unittest tests.test_511130_live_monitor`：91 tests OK。
 - 本地 Chrome 截图：`tmp/511130-dashboard-reorder-local.png`，DOM 检查 `cards=4`、`hasPrimary=false`、`hasLatestA=false`、`chartBelowQuote=true`。
+- 线上只读 smoke：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`、`data_status_code=market_closed`。
+- 线上 HTML/DOM：`refreshSec3=true`、`quote_before_chart=true`、`has_primary_value=false`、`has_latest_a=false`、`chart_title=true`。
+- Railway source 确认为 `codex/511130-a-monitor`，Dockerfile 和 `--auto-run --auto-run-notify --interval 3` 启动命令生效。
 
-下一步：
+运维注意：
 
-- 用户若要求上线，提交并推送当前分支，再部署 Railway。
-- 部署后跑 `python3.12 scripts/511130_live_monitor/smoke_check.py https://511130-live-monitor-production.up.railway.app --json`。
+- Railway 服务在线，持久化 volume 挂载 `/data`，运行不依赖本地 Codex 在线。
+- `/health.public_readonly=false`，因此公网仍保留 `手动算一次` / `发送飞书测试` 等写接口能力；若后续希望团队看板只读，应在 Railway 设置 `A_MONITOR_PUBLIC_READONLY=1`，但这会禁用这些按钮。
+- 本轮没有调用 `/api/notify-test`，没有发送飞书消息，没有读取或写入 webhook/secret。
+- headless Chrome/Edge 在本机生成线上截图时被系统杀掉；线上 DOM 和 smoke 已通过，本地截图仍在 `tmp/511130-dashboard-reorder-local.png`。
 
 ## 2026-06-24 - 511130 行情更新频率接续检查
 

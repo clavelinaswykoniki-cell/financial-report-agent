@@ -2,11 +2,14 @@
 
 ## 2026-06-24
 
-- 本地完成 511130 团队看板布局调整：去掉顶部大号当前 a 统计块，四联行情卡上移到首屏，历史曲线移动到四联卡下方；公式、行情源、阈值和飞书逻辑未改。
+- 511130 团队看板布局调整已上线：去掉顶部大号当前 a 统计块，四联行情卡上移到首屏，历史曲线移动到四联卡下方；公式、行情源、阈值和飞书逻辑未改。
+- 发布链路：GitHub `codex/511130-a-monitor`，布局提交 `6b29e98`，Railway deployment `97db306a-2342-4555-a6f5-20747807eec3`，生产地址 `https://511130-live-monitor-production.up.railway.app`。
 - 接续检查 `scripts/511130_live_monitor` 的“加快行情更新频率”任务。
 - 代码已确认：`live_a_dashboard.py` 默认 `--interval=3`，前端按 `cfg.refreshSec * 1000` 轮询，Dockerfile 和 `railway.toml` 启动命令均使用 `--interval 3`。
 - 线上只读 smoke 通过：`ok=true`、`issues=[]`、`process_ok=true`、`auto_loop=running`。
+- 线上 HTML/DOM 通过：`refreshSec3=true`、`quote_before_chart=true`、旧 `primary-value/latestA` 不存在。
 - 当前线上状态为休市 `market_closed`，因此 `data_ok=false` 属于预期数据状态，不是自动线程空转或服务崩溃。
+- Railway 已挂载 `/data` volume，生产运行不依赖本地 Codex 在线；当前 `/health.public_readonly=false`，公网写接口仍保留。
 - 本轮未触发飞书真实发送，未读取或写入 webhook/secret。
 
 ## 2026-06-23
